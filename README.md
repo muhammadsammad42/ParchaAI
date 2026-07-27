@@ -1,14 +1,5 @@
 # ParchaAI – AI-Powered Handwritten Prescription Decoder
 
-[![Python](https://img.shields.io/badge/Python-3.11%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
-[![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B.svg?logo=flutter&logoColor=white)](https://flutter.dev/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Celery](https://img.shields.io/badge/Celery-Async Processing-37814A.svg?logo=celery&logoColor=white)](https://docs.celeryq.dev/)
-[![Redis](https://img.shields.io/badge/Redis-Broker-DC382D.svg?logo=redis&logoColor=white)](https://redis.io/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/yourusername/ParchaAI?style=social)](https://github.com/yourusername/ParchaAI)
-[![Last Commit](https://img.shields.io/github/last-commit/yourusername/ParchaAI)](https://github.com/yourusername/ParchaAI/commits/main)
-
 **ParchaAI** is an advanced, AI-powered healthcare application designed to bridge the gap between complex doctor handwriting and patient understanding. By leveraging Vision Language Models (VLMs), automated validation pipelines, local and OpenFDA drug databases, confidence scoring mechanisms, and localized audio instructions (Urdu Text-to-Speech), ParchaAI turns unreadable handwritten prescriptions into clear, structured, and accessible medical guidance.
 
 ---
@@ -373,29 +364,6 @@ flowchart LR
     F --> G[🔊 Text-to-Speech]
     G --> H[📱 Flutter Display & Audio]
 ```
-
----
-
-## 🖼️ Screenshots
-
-| Home Screen | Upload Screen | Processing Screen |
-| :---: | :---: | :---: |
-| *(Placeholder: Home Screen UI)* | *(Placeholder: Upload Screen UI)* | *(Placeholder: Processing Screen UI)* |
-
-| Results Screen | Medicine Details | Audio Playback |
-| :---: | :---: | :---: |
-| *(Placeholder: Results Screen UI)* | *(Placeholder: Details UI)* | *(Placeholder: Audio UI)* |
-
----
-
-## 🚀 Future Improvements
-
-- [ ] **User Authentication & Profiles**: Secure login for patients and healthcare providers.
-- [ ] **Prescription History & Vault**: Cloud backup and timeline of previous medications.
-- [ ] **Offline OCR Engine**: On-device lightweight models for basic offline recognition.
-- [ ] **Cloud Deployment**: Containerized Docker setup with Kubernetes orchestration.
-- [ ] **Doctor & Pharmacist Dashboard**: Portal for medical professionals to review flagged prescriptions.
-- [ ] **Multi-Language Audio**: Support for regional languages (e.g., Pashto, Punjabi, Sindhi).
 
 ---
 
