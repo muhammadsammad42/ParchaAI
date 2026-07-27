@@ -1,0 +1,72 @@
+﻿image_path,medicine_name,dosage,frequency,duration
+rx_01.jpg,Azithromycin,"200 mg/5mL - Day 1: 15 mL, Day 2: 7.5 mL",Once daily,null
+rx_02.jpg,Syr Megacv Forte,4 ml,Three times daily,null
+rx_02.jpg,Syp Ibugesic,2 ml,PRN (if fever > 102°F),null
+rx_02.jpg,Syp Alerid,2.5 ml,Once daily (at night),5 days
+rx_02.jpg,Anmol Rectal Suppository,170 mg,null,null
+rx_03.jpg,Candibiotic Ear Drops,1 drop,Three times daily,3 weeks
+rx_03.jpg,Taxim O Drops,0.4 ml,Twice daily,3 days
+rx_03.jpg,Nasoclear Nasal Drops,1 drop,SOS,null
+rx_03.jpg,Bonnisan Drops,0.5 ml,null,null
+rx_04.jpg,Losartan,50 mg tab (take 1 tab),Once daily (morning),null
+rx_05.jpg,Plendil,20 mg,Every 6 hours,null
+rx_05.jpg,Ferrous Sulfate,300 mg,Three times daily (with meals),null
+rx_05.jpg,Humulin N,30 units,Once daily (morning),null
+rx_06.jpg,Paracetamol,500 mg (2 tabs),PRN (at least 20 min after the Metoclopramide dose),null
+rx_06.jpg,Metoclopramide,10 mg suppository (1 supp),PRN (as soon as an attack is felt),null
+rx_07.jpg,Betaloc,100 mg (1 tab),Twice daily,null
+rx_07.jpg,Dorzolamidum,10 mg (1 tab),Twice daily,null
+rx_07.jpg,Cimetidine,50 mg (2 tabs),Three times daily,null
+rx_07.jpg,Oxprelol,50 mg (1 tab),Once daily,null
+rx_08.jpg,T-mimic Drops,0.3 ml,Three times daily,3 days
+rx_08.jpg,Arthakind Drops,0.4 ml,Three times daily,3 days
+rx_08.jpg,Advent Drops,0.8 ml,Three times daily,3 days
+rx_08.jpg,Nasoclear Nasal Drops,null,SOS,null
+rx_08.jpg,Htrzole Cream,null,Twice daily,null
+rx_09.jpg,Tab Stamlo,5 mg,Once daily,30 days
+rx_09.jpg,Tab Arvant,5 mg,Once daily,30 days
+rx_09.jpg,Tab Thyrox,dose illegible,Once daily,30 days
+rx_09.jpg,Tab Bplex Forte,null,Twice daily,30 days
+rx_10.jpg,Amoxicillin,50 mg/mL suspension (5 mL per dose; 100 mL total dispensed),Three times daily,Finish course
+rx_11.jpg,Tab Lanol-ER,1 tablet,Twice daily (after food),5 days
+rx_11.jpg,Tab Dompan,1 tablet,Twice daily (before food),5 days
+rx_12.jpg,Amoxicillin (Himox),500 mg (1 cap; #21 dispensed),Three times daily,Seven days
+rx_13.jpg,Metadate,10 mg (1 tab),Once daily,null
+rx_14.jpg,Syp Augmentin,6 ml,Twice daily,7 days
+rx_14.jpg,Syp Ambrodil-5,4 ml,Twice daily,null
+rx_14.jpg,Nasoclear Nasal Drops,null,Once daily,null
+rx_14.jpg,Tab LCZ (Levocetirizine 5mg),1/2 tablet,null,null
+rx_15.jpg,Digoxin,0.125 mg (1 tablet; #7 dispensed),Once daily,null
+rx_16.jpg,Inj. Monocef,3/4 vial (500mg) IV,Every 12 hours,null
+rx_16.jpg,Syr. Floxet,6 ml,"PRN (if fever > 100°F, repeat every 4-6 hours)",null
+rx_16.jpg,Tab. Frisium (Syp) 10,1/2 tablet,Twice daily,null
+rx_16.jpg,Syp. Tonoferon,2.5 ml,Twice daily,1 month
+rx_17.jpg,Tramadol + Paracetamol tab,1 tablet (#20 dispensed),Every 6 hours,null
+rx_18.jpg,FeSO4 (Ferrous Sulfate) tab,#30 dispensed,Frequency unclear (written as A.D.),null
+rx_18.jpg,Ascorbic Acid tab,100 mg (#30 dispensed),Once daily,null
+rx_19.jpg,Syp Sinmol DS,4 ml,SOS,3 days
+rx_19.jpg,Syp Mucolite LS,2.5 ml,Three times daily,3 days
+rx_19.jpg,Tab Meftal-P,1 tablet,SOS,3 days
+rx_19.jpg,Medicine name illegible (follow-up section),null,null,5 days
+rx_20.jpg,Inj Liposomal Amphotericin,50 mg per vial - 6 vials/day (300 mg total),Once daily,null
+rx_20.jpg,Inj Amphotericin Conventional,50 mg per vial - 1 vial/day,Once daily,null
+rx_21.jpg,Tolbutamide,1000 mg (1 tab; #30 dispensed),Once daily (before breakfast),null
+rx_21.jpg,Morphine,10 mg (1 tab; #35 dispensed),Every 6 hours (maximum 5 tablets daily),null
+rx_22.jpg,Tab Augmentin,625 mg,Twice daily (after meals),5 days
+rx_22.jpg,Tab Enzoflam,null,Twice daily (after meals),5 days
+rx_22.jpg,Tab Pan-D,40 mg,Once daily (before meals),5 days
+rx_22.jpg,Hexigel Gum Paint,null,Twice daily,1 week
+rx_23.jpg,Inj Remdec,"200 mg STAT, then 100 mg maintenance",STAT once then once daily,4 days (after loading dose)
+rx_23.jpg,Inj Actemra,400 mg,Two doses total (2 days apart),2 doses total
+rx_24.jpg,Tab Oflazest OZ,1 tablet (#6 dispensed),Twice daily,3 days
+rx_24.jpg,Tab Azenac-MR,1 tablet (#6 dispensed),Twice daily,3 days
+rx_24.jpg,Tab Andial,2 tabs then 1 tab (#5 dispensed),Every 6 hours,3 days
+rx_24.jpg,Tab Zofer U-R,1 tablet (#6 dispensed),Twice daily,3 days
+rx_25.jpg,Tab Azee,500 mg,Once daily,7 days
+rx_25.jpg,Syp Tusq,1 teaspoon,Three times daily,null
+rx_25.jpg,Tab Pan,40 mg,Once daily,7 days
+rx_25.jpg,Tab Dolo 650,650 mg,SOS (for fever/pain),null
+rx_26.jpg,Inj Liposomal Amphotericin B,50 mg per vial - 6 vials/day (300 mg total),Once daily,null
+rx_27.jpg,Syp Cefelac,3 ml,Twice daily,7 days
+rx_27.jpg,Syp RB Tone Kid,2.5 ml,Once daily,2 months
+rx_27.jpg,Syp Wikoryl,3 ml,Once daily,3 days

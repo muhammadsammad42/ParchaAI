@@ -1,0 +1,47 @@
+# Python / Bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Testing / Virtual Env
+.pytest_cache/
+.venv/
+venv/
+ENV/
+
+# Local cache & logs
+cache/
+logs/
+*.log
+
+# Generated Pipeline Outputs (Regenerable)
+outputs/
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+
+# Local SQLite Runtime Database (keep input datasets in data/)
+data/parcha_ai.db
+
+# Agent Config & IDE Local State
+.agents/
+.vscode/
+.idea/
+
+# Flutter & Mobile (parcha_ai_app specific build & tool artifacts)
+parcha_ai_app/.dart_tool/
+parcha_ai_app/.flutter-plugins
+parcha_ai_app/.flutter-plugins-dependencies
+parcha_ai_app/.packages
+parcha_ai_app/build/
+parcha_ai_app/android/.gradle/
+parcha_ai_app/android/app/debug/
+parcha_ai_app/android/app/profile/
+parcha_ai_app/android/app/release/
+parcha_ai_app/ios/Pods/
+parcha_ai_app/ios/.symlinks/
+parcha_ai_app/ios/Flutter/Flutter.framework
+parcha_ai_app/ios/Flutter/Flutter.podspec

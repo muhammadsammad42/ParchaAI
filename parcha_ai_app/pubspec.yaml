@@ -1,0 +1,22 @@
+name: parcha_ai_app
+description: ParchaAI - upload a handwritten prescription, get structured info and Urdu audio.
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  http: ^1.2.2                # calling /upload, /status, /result
+  image_picker: ^1.1.2        # camera / gallery picker for the prescription photo
+  audioplayers: ^6.1.0        # plays the Urdu .mp3 from the returned audio_url
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
