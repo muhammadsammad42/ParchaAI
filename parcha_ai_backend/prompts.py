@@ -568,12 +568,12 @@ def build_fallback_verification_prompt(
 # =============================================================================
 
 HALLUCINATION_PREVENTION_CHECKLIST = [
-    "✓ Prompt explicitly forbids inventing medicine names",
-    "✓ Prompt requires 'unread' for unidentifiable fields",
-    "✓ Prompt separates medicine name from dosage strength",
-    "✓ Prompt forbids markdown/conversational wrappers",
-    "✓ Prompt includes confidence scoring requirement",
-    "✓ Few-shot examples demonstrate 'unread' usage",
+    "Prompt explicitly forbids inventing medicine names",
+    "Prompt requires 'unread' for unidentifiable fields",
+    "Prompt separates medicine name from dosage strength",
+    "Prompt forbids markdown/conversational wrappers",
+    "Prompt includes confidence scoring requirement",
+    "Few-shot examples demonstrate 'unread' usage",
 ]
 
 

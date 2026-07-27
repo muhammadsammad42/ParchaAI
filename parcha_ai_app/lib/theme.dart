@@ -1,6 +1,6 @@
 
 import 'package:flutter/material.dart';
-import 'models.dart'; // Import ConfidenceLevel enum
+import 'models.dart'; 
 
 /// Professional healthcare color palette
 class AppColors {
@@ -281,4 +281,3 @@ IconData getConfidenceIcon(ConfidenceLevel level) {
   }
 }
 
-// Note: ConfidenceLevel enum is defined in models.dart

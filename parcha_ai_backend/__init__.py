@@ -20,12 +20,12 @@ Core Components
 Usage
 -----
 Basic extraction:
-     from parcha_ai import quick_process
+     from parcha_ai_backend import quick_process
      import asyncio
      result = asyncio.run(quick_process("path/to/prescription.jpg"))
 
 Full evaluation:
-     from parcha_ai import run_full_evaluation
+     from parcha_ai_backend import run_full_evaluation
      import asyncio
      metrics = asyncio.run(run_full_evaluation())
 """

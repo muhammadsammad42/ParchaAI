@@ -44,13 +44,6 @@ class OpenFDAClient:
         Request timeout in seconds
     max_retries : int
         Maximum number of retry attempts
-    
-    Examples
-    --------
-    >>> client = OpenFDAClient()
-    >>> result = await client.search_drug("Aspirin")
-    >>> if result:
-    ...     print(result['warnings'])
     """
     
     def __init__(
@@ -165,12 +158,6 @@ class OpenFDAClient:
                 'active_ingredient': str
             }
         
-        Examples
-        --------
-        >>> client = OpenFDAClient()
-        >>> result = await client.search_drug("Aspirin")
-        >>> if result:
-        ...     print(result['warnings'])
         """
         if not query or not isinstance(query, str):
             logger.warning(f"Invalid query: {query}")
@@ -222,19 +209,6 @@ class OpenFDAClient:
         self,
         url: str
     ) -> Optional[Dict]:
-        """
-        Perform HTTP request with retry logic.
-        
-        Parameters
-        ----------
-        url : str
-            Full URL to request
-        
-        Returns
-        -------
-        dict or None
-            Response JSON data or None if failed
-        """
         self.stats['total_requests'] += 1
         
         for attempt in range(self.max_retries + 1):
@@ -405,15 +379,6 @@ class OpenFDAClient:
         -------
         MedicineDetail
             Enriched medicine object (modified in place and returned)
-        
-        Examples
-        --------
-        >>> client = OpenFDAClient()
-        >>> med = MedicineDetail(medicine_name="Aspirin", dosage="500mg")
-        >>> enriched = await client.enrich_medicine(med)
-        >>> print(enriched.precautions)
-        >>> print(enriched.found_in_openfda)
-        True
         """
         # Verification call: check whether the drug exists in OpenFDA
         result = await self.verify_medicine(medicine.medicine_name, "openfda.brand_name")
@@ -477,10 +442,6 @@ class OpenFDAClient:
         dict
             Mapping of query -> result (or None)
         
-        Examples
-        --------
-        >>> client = OpenFDAClient()
-        >>> results = await client.batch_search(["Aspirin", "Ibuprofen"])
         """
         tasks = [self.search_drug(query) for query in queries]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -525,7 +486,6 @@ class OpenFDAClient:
 # CONVENIENCE FUNCTIONS
 # =============================================================================
 
-# Global client instance (singleton pattern)
 _global_client: Optional[OpenFDAClient] = None
 
 
@@ -559,12 +519,6 @@ async def quick_search(query: str) -> Optional[Dict[str, any]]:
     -------
     dict or None
         Drug information or None
-    
-    Examples
-    --------
-    >>> result = await quick_search("Aspirin")
-    >>> if result:
-    ...     print(result['warnings'])
     """
     client = get_client()
     return await client.search_drug(query)
@@ -583,11 +537,6 @@ async def quick_enrich(medicine: MedicineDetail) -> MedicineDetail:
     -------
     MedicineDetail
         Enriched medicine
-    
-    Examples
-    --------
-    >>> med = MedicineDetail(medicine_name="Aspirin", dosage="500mg")
-    >>> enriched = await quick_enrich(med)
     """
     client = get_client()
     return await client.enrich_medicine(medicine)
@@ -626,14 +575,6 @@ async def validate_and_enrich_medicine(
     -------
     MedicineDetail
         Fully validated and enriched medicine
-    
-    Examples
-    --------
-    >>> med = MedicineDetail(medicine_name="Augmentin", dosage="625mg")
-    >>> enriched = await validate_and_enrich_medicine(med)
-    >>> print(f"Found in DB: {enriched.found_in_local_db}")
-    >>> print(f"Found in FDA: {enriched.found_in_openfda}")
-    >>> print(f"Needs review: {enriched.requires_human_review}")
     """
     # Import here to avoid circular dependency
     from .fuzzy_match import get_matcher as get_local_matcher
@@ -663,12 +604,9 @@ async def validate_and_enrich_medicine(
     
     # Step 3: Unidentified drug - apply safety rules
     logger.warning(
-        f"⚠ UNIDENTIFIED DRUG: {medicine.medicine_name} not found in local DB or OpenFDA"
+        f"UNIDENTIFIED DRUG: {medicine.medicine_name} not found in local DB or OpenFDA"
     )
-    
-    # CRITICAL SAFETY RULE: Preserve original name but mark metadata as unread
-    # DO NOT discard the medicine name - it came from the prescription
-    # Force all enriched fields to "unread" to prevent hallucinated medical data
+
     medicine.composition = "unread"
     medicine.uses = "unread"
     medicine.side_effects = "unread"

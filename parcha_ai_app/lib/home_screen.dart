@@ -707,10 +707,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Removed: purpose (long English paragraph from DB)
-        // Removed: sideEffects (long English paragraph from DB)
-        // These clutter the UI - the Urdu explanation is the primary patient content
-        
         if (!medicine.isFieldUnread(medicine.composition))
           _buildDetailField('Composition', medicine.composition, Icons.science_outlined),
         

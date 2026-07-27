@@ -42,11 +42,6 @@ def load_image(image_path: Union[str, Path]) -> np.ndarray:
     ------
     ImageProcessingError
         If image cannot be loaded or is invalid
-    
-    Examples
-    --------
-     image = load_image("prescription.jpg")
-     print(image.shape)  # (height, width, channels)
     """
     image_path = Path(image_path)
     
@@ -71,26 +66,7 @@ def load_image(image_path: Union[str, Path]) -> np.ndarray:
 
 
 def validate_image(image: np.ndarray, min_size: Tuple[int, int] = (100, 100)) -> bool:
-    """
-    Validate that an image meets minimum quality requirements.
-    
-    Parameters
-    ----------
-    image : np.ndarray
-        Image to validate
-    min_size : tuple of int, optional
-        Minimum (width, height) in pixels, by default (100, 100)
-    
-    Returns
-    -------
-    bool
-        True if image is valid
-    
-    Raises
-    ------
-    ImageProcessingError
-        If image fails validation
-    """
+
     if image is None:
         raise ImageProcessingError("Image is None")
     
@@ -114,34 +90,7 @@ def encode_image_to_base64(
     image_input: Union[str, Path, np.ndarray],
     validate: bool = True
 ) -> str:
-    """
-    Encode an image to base64 string for API transmission.
     
-    This function reads the raw file bytes and encodes them directly,
-    preserving the original format (JPG, PNG, etc.).
-    
-    Parameters
-    ----------
-    image_path : str or Path
-        Path to the image file
-    validate : bool, optional
-        Whether to validate image before encoding, by default True
-    
-    Returns
-    -------
-    str
-        Base64-encoded image string
-    
-    Raises
-    ------
-    ImageProcessingError
-        If image cannot be loaded or encoded
-    
-    Examples
-    --------
-     b64_string = encode_image_to_base64("prescription.jpg")
-     print(len(b64_string))  # Length of base64 string
-    """
     if isinstance(image_input, np.ndarray):
         image = image_input
         if validate:
@@ -200,11 +149,6 @@ def create_data_url(
     -------
     str
         Complete data URL ready for API transmission
-    
-    Examples
-    --------
-     data_url = create_data_url("prescription.jpg")
-     print(data_url[:50])  # "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEA..."
     """
     if isinstance(image_input, np.ndarray):
         mime_type = 'png'
@@ -258,11 +202,7 @@ def get_image_info(image_path: Union[str, Path]) -> dict:
         - channels: int
         - size_bytes: int
         - size_mb: float
-    
-    Examples
-    --------
-     info = get_image_info("prescription.jpg")
-     print(f"{info['width']}x{info['height']} pixels")
+
     """
     image_path = Path(image_path)
     
@@ -379,11 +319,6 @@ def batch_load_images(image_paths: list[Union[str, Path]]) -> dict[str, np.ndarr
     dict
         Mapping of filename -> image array
         Failed loads are logged but not included in output
-    
-    Examples
-    --------
-    >>> images = batch_load_images(["img1.jpg", "img2.jpg"])
-    >>> print(f"Loaded {len(images)} images")
     """
     images = {}
     

@@ -1,9 +1,3 @@
-"""
-Configuration module for ParchaAI prescription extraction pipeline.
-
-This module centralizes all configuration settings including paths, model parameters,
-pipeline behavior thresholds, and API configurations.
-"""
 
 import os
 from pathlib import Path
@@ -26,10 +20,10 @@ class Config:
     project_root: Path = Path(__file__).parent.parent
     
     # Data directories
-    datasets_dir: Path = field(default_factory=lambda: Path(__file__).parent.parent / "datasets")
+    datasets_dir: Path = field(default_factory=lambda: Path(__file__).parent.parent / "drug_database")
     raw_images_dir: Path = field(default_factory=lambda: Path(__file__).parent.parent / "data" / "raw_images")
     ground_truth_csv: Path = field(default_factory=lambda: Path(__file__).parent.parent / "data" / "labels" / "ground_truth.csv")
-    drug_reference_db: Path = field(default_factory=lambda: Path(__file__).parent.parent / "datasets" / "drug_reference_db.csv")
+    drug_reference_db: Path = field(default_factory=lambda: Path(__file__).parent.parent / "drug_database" / "drug_reference_db.csv")
     
     # Output directories
     outputs_dir: Path = field(default_factory=lambda: Path(__file__).parent.parent / "outputs")
@@ -39,8 +33,6 @@ class Config:
     # =====================================================================
     # API KEYS & ENDPOINTS
     # =====================================================================
-    # PRIMARY vision model: Google Gemini API. Required -- extraction will
-    # raise if this is missing.
     gemini_api_key: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
     # Base REST endpoint for Gemini's generateContent call. The model name is
     # appended when building the final request URL.
@@ -51,9 +43,6 @@ class Config:
         )
     )
 
-    # FALLBACK vision model: Groq API. Optional -- if not configured, the
-    # pipeline simply skips fallback verification and keeps the primary
-    # Gemini result.
     groq_api_key: Optional[str] = field(
         default_factory=lambda: os.getenv("GROQ_API_KEY", None)
     )
@@ -65,23 +54,14 @@ class Config:
     # =====================================================================
     # PRIMARY MODEL (GOOGLE GEMINI VISION)
     # =====================================================================
-    # "gemini-3.1-flash-lite" is fast, multimodal, and available on
-    # Google's free tier as of 2026. Used for BOTH extraction passes
-    # (Pass 1: count medicines, Pass 2: full structured extraction).
     gemini_model_name: str = field(
         default_factory=lambda: os.getenv("GEMINI_MODEL_NAME", "gemini-3.1-flash-lite")
     )
     temperature: float = 0.0
-    # Response budget for Pass 2 (full structured extraction). Pass 1
-    # (counting) uses a smaller fixed budget internally since it only
-    # needs to return a single number.
     max_tokens: int = 3200
-    # Retries on a rate-limited (429) or transient Gemini API error before
-    # giving up on a single call.
     gemini_max_retries: int = field(
         default_factory=lambda: int(os.getenv("GEMINI_MAX_RETRIES", "5"))
     )
-    # Base delay (seconds) for exponential backoff: base * 2^attempt.
     gemini_retry_base_delay: float = field(
         default_factory=lambda: float(os.getenv("GEMINI_RETRY_BASE_DELAY", "3.0"))
     )
@@ -89,44 +69,20 @@ class Config:
     # =====================================================================
     # FALLBACK MODEL (GROQ VISION)
     # =====================================================================
-    # Groq vision model used when the primary Gemini extraction has low
-    # confidence. Only a single verification call is made (no two-pass
-    # counting), since fallback usage should stay light.
     groq_model_name: str = field(
         default_factory=lambda: os.getenv(
             "GROQ_MODEL_NAME", "qwen/qwen3.6-27b"
         )
     )
-    # FIX (qwen migration): qwen/qwen3.6-27b is a REASONING model -- unlike
-    # llama-4-scout, it spends a chunk of its output token budget on an
-    # internal chain-of-thought BEFORE writing the actual JSON answer. The
-    # old budget of 1500 was tuned for llama-4-scout (a non-reasoning
-    # model) and was being consumed almost entirely by qwen's reasoning
-    # trace, leaving little or no room for the actual JSON -- which is
-    # exactly why every fallback call was logging
-    # "JSON parse error: Expecting value: line 1 column 1 (char 0)"
-    # (the returned `content` was reasoning text or got cut off before any
-    # '{'/'[' was ever written). Raised substantially so the model has
-    # room to think AND answer.
     fallback_max_new_tokens: int = field(
         default_factory=lambda: int(os.getenv("FALLBACK_MAX_NEW_TOKENS", "4000"))
     )
     fallback_temperature: float = 0.0
 
-    # FIX (qwen migration): Groq's reasoning-model endpoints accept a
-    # `reasoning_effort` parameter ("none" | "low" | "medium" | "high") to
-    # cap how much of the response budget is spent thinking before
-    # answering. Defaulting to "low" leaves the rest of the (now larger)
-    # token budget for the actual JSON. This is applied defensively in
-    # extraction.py -- if the installed groq SDK / model rejects the
-    # parameter, the call is retried once without it, so this is safe even
-    # if Groq changes/removes support later.
     groq_reasoning_effort: str = field(
         default_factory=lambda: os.getenv("GROQ_REASONING_EFFORT", "none")
     )
 
-    # Urdu patient-instruction generation and speech are configurable
-    # separately from the vision fallback.
     urdu_model: str = field(
         default_factory=lambda: os.getenv("URDU_MODEL", "llama-3.3-70b-versatile")
     )
@@ -144,7 +100,6 @@ class Config:
     # =====================================================================
     # PIPELINE BEHAVIOR
     # =====================================================================
-    # Confidence threshold for triggering fallback verification
     confidence_threshold: float = 0.85
     
     # Enable/disable secondary verification pass
@@ -154,22 +109,12 @@ class Config:
     fuzzy_match_threshold: int = 80  # RapidFuzz score for medicine NAME matching
     field_fuzzy_threshold: int = 85  # RapidFuzz score for field VALUE matching
 
-    # =====================================================================
-    # RATE LIMITING / RETRY (Groq fallback calls)
-    # =====================================================================
-    # Max retries on a rate-limited (429) or transient Groq API error before
-    # giving up on a single fallback call.
     groq_max_retries: int = field(
         default_factory=lambda: int(os.getenv("GROQ_MAX_RETRIES", "8"))
     )
-    # Base delay (seconds) for exponential backoff: base * 2^attempt.
-    # Overridden by the API's Retry-After header when present.
     groq_retry_base_delay: float = field(
         default_factory=lambda: float(os.getenv("GROQ_RETRY_BASE_DELAY", "3.0"))
     )
-    # Small pause between images during batch/evaluation runs, purely to
-    # avoid bursting Gemini's free-tier rate limit in the first place
-    # (Gemini is now called on every image, since it's primary).
     inter_request_delay_seconds: float = field(
         default_factory=lambda: float(os.getenv("INTER_REQUEST_DELAY_SECONDS", "8"))
     )

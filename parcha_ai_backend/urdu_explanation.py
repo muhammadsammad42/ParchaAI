@@ -5,11 +5,6 @@ structure so patients always hear information in the same order:
 
     [Medicine Name] -> [Dosage] -> [Frequency & Timing] -> [Duration] -> [Safety Guardrail]
 
-This mirrors the two-pass / multi-layer "reduce hallucination, don't guess"
-philosophy used elsewhere in the pipeline: the LLM is only asked to
-translate/naturalize the already-extracted, already-validated fields into
-Urdu speech -- it is explicitly told not to reorder, merge out of order,
-invent missing values, or add extra medical advice.
 """
 
 import asyncio
@@ -34,10 +29,7 @@ class UrduExplanationError(Exception):
 # =============================================================================
 # PROMPT TEMPLATE
 # =============================================================================
-# NOTE: the five numbered parts below are a hard contract, not a suggestion.
-# The model is a *translator/naturalizer* of already-extracted fields, not a
-# free-form writer -- it must not reorder these parts, skip the disclaimer,
-# or invent any value that wasn't given to it.
+
 URDU_INSTRUCTION_TEMPLATE = """آپ ایک پاکستانی مریض کے لیے ایک دوا کی محفوظ صوتی ہدایت لکھتے ہیں۔
 صرف اردو رسم الخط میں لکھیں (رومن اردو، انگریزی، ہیڈنگ، مارک ڈاؤن یا بلٹ پوائنٹس بالکل استعمال نہ کریں)۔
 

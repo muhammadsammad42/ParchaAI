@@ -1,21 +1,4 @@
 
-"""
-Text-to-speech generation for ParchaAI (Week 3).
-
-Converts Urdu instruction text (from urdu_explanation.py) into .mp3
-audio using gTTS (lang='ur'), with an offline Coqui TTS fallback hook
-for when gTTS is unreachable (no internet on-device, quota, etc.),
-matching the Week 3 plan's "gTTS + Coqui fallback" deliverable.
-
-Drop this file into the `parcha_ai` package next to preprocessing.py.
-
-Usage
------
-    >>> from parcha_ai.text_to_speech import TextToSpeechEngine
-    >>> engine = TextToSpeechEngine()
-    >>> mp3_path = engine.synthesize("یہ دوا کھانے کے بعد لیں۔", "augmentin_01")
-"""
-
 import logging
 import re
 import time
@@ -120,15 +103,8 @@ class TextToSpeechEngine:
     # FALLBACK: Coqui TTS (offline)
     # -------------------------------------------------------------------
     def _synthesize_coqui(self, text: str, output_path: Path) -> Path:
-        """
-        Offline fallback. Coqui TTS does not ship an official Urdu model
-        out of the box, so this is a best-effort hook: point
-        COQUI_MODEL_NAME at any multilingual/Urdu-capable checkpoint you
-        have available. If unavailable, this raises and the caller
-        should treat the medicine as "audio unavailable" rather than
-        silently producing wrong-language audio.
-        """
-        from TTS.api import TTS  # local import: optional heavy dependency
+
+        from TTS.api import TTS  
 
         if self._coqui_model is None:
             import os
@@ -136,8 +112,6 @@ class TextToSpeechEngine:
             logger.info(f"Loading Coqui TTS fallback model: {model_name}")
             self._coqui_model = TTS(model_name)
 
-        # Coqui writes WAV natively. Export through pydub so a file named
-        # .mp3 is genuinely MP3 rather than WAV bytes with the wrong suffix.
         wav_path = output_path.with_suffix(".coqui.wav")
         self._coqui_model.tts_to_file(text=text, file_path=str(wav_path))
         try:
@@ -171,11 +145,6 @@ class TextToSpeechEngine:
         -------
         Path
             Path to the generated .mp3 file.
-
-        Raises
-        ------
-        TTSError
-            If both backends fail.
         """
         text = prepare_urdu_for_tts(text)
         if not text:
@@ -209,22 +178,7 @@ class TextToSpeechEngine:
         texts: List[str],
         filename_stems: List[str],
     ) -> List[Optional[Path]]:
-        """
-        Synthesize multiple texts. Failures are logged and returned as
-        None at that index rather than aborting the whole batch, so one
-        bad medicine doesn't take down the rest of the prescription's
-        audio.
 
-        Parameters
-        ----------
-        texts : list of str
-        filename_stems : list of str
-            Must be the same length as `texts`.
-
-        Returns
-        -------
-        list of (Path or None)
-        """
         if len(texts) != len(filename_stems):
             raise ValueError("texts and filename_stems must be the same length")
 
@@ -238,15 +192,7 @@ class TextToSpeechEngine:
         return results
 
     def combine_audio(self, mp3_paths: List[Path], output_stem: str) -> Optional[Path]:
-        """
-        Concatenate several per-medicine .mp3 files into one
-        per-prescription audio file, so a patient with 4 medicines gets
-        a single voice note instead of 4. Requires pydub + ffmpeg.
 
-        Returns None (and logs) if pydub/ffmpeg aren't available rather
-        than raising, since per-medicine files are still usable on their
-        own.
-        """
         valid_paths = [p for p in mp3_paths if p is not None]
         if not valid_paths:
             return None

@@ -41,11 +41,6 @@ from .validation import PrescriptionResponse
 
 logger = logging.getLogger(__name__)
 
-# Weights for clinical_weighted_accuracy. medicine_name and dosage are
-# weighted higher than frequency/duration because those two are where an
-# extraction error translates directly into patient harm (wrong drug, wrong
-# strength). Adjust if your clinical advisor/mentor wants a different split
-# -- these are a defensible starting point, not a fixed standard.
 CLINICAL_WEIGHTS = {
     'medicine_name': 0.35,
     'dosage': 0.35,
@@ -72,26 +67,15 @@ class EvaluationMetrics:
         self.exact_matches = 0
         self.hallucinations = 0
         self.false_negatives = 0
-
-        # Confidence-calibration / safety-net tracking. A prediction is
-        # "clinically correct" here if its medicine_name AND dosage both
-        # match ground truth (the two fields where an error can directly
-        # cause patient harm). This is tracked separately from field
-        # accuracy so we can answer: "when the pipeline is wrong, does it
-        # know it, and does it flag it for a human?"
         self.correct_confidence_sum = 0.0
         self.correct_count = 0
         self.incorrect_confidence_sum = 0.0
         self.incorrect_count = 0
-        self.incorrect_flagged_count = 0  # incorrect AND low_confidence/requires_human_review
+        self.incorrect_flagged_count = 0  
 
         self.total_inference_time = 0.0
         
         self.per_image_results = []
-        # Raw predicted-vs-truth field values for every matched pair,
-        # hallucination, and missed ground-truth entry across all images --
-        # exported separately so real failures can be inspected instead of
-        # guessed at from aggregate accuracy numbers.
         self.debug_rows = []
     
     def calculate_aggregates(self) -> Dict:
@@ -113,12 +97,6 @@ class EvaluationMetrics:
         dosage_accuracy = (self.dosage_correct / n_pred) * 100
         frequency_accuracy = (self.frequency_correct / n_pred) * 100
         duration_accuracy = (self.duration_correct / n_pred) * 100
-
-        
-        # Precision, Recall, F1
-        # True Positives: correctly extracted medicines
-        # False Positives: hallucinated medicines
-        # False Negatives: missed medicines
         
         true_positives = self.medicine_name_correct
         false_positives = self.hallucinations
@@ -151,24 +129,11 @@ class EvaluationMetrics:
         # Average inference time
         avg_inference_time = self.total_inference_time / n_images
 
-        # --- Composite accuracy metrics ---
-        # Macro Field Accuracy: simple average of the 4 extractable fields
-        # that actually have ground truth. This is the standard way
-        # document/entity-extraction systems report a single "accuracy"
-        # number (analogous to macro-F1 across fields) -- it doesn't hide
-        # weak fields the way an unweighted micro-average over all
-        # predicted tokens could.
         macro_field_accuracy = round(
             (medicine_name_accuracy + dosage_accuracy + frequency_accuracy + duration_accuracy) / 4,
             2
         )
 
-        # Clinical-Weighted Accuracy: medicine_name and dosage are weighted
-        # higher than frequency/duration because getting the WRONG DRUG or
-        # WRONG DOSE is a direct patient-safety failure, whereas a
-        # frequency/duration miss is typically caught by the pharmacist or
-        # is lower-stakes. Weights are a judgment call for your domain --
-        # adjust CLINICAL_WEIGHTS below if you disagree with this split.
         clinical_weighted_accuracy = round(
             medicine_name_accuracy * CLINICAL_WEIGHTS['medicine_name']
             + dosage_accuracy * CLINICAL_WEIGHTS['dosage']
@@ -177,13 +142,6 @@ class EvaluationMetrics:
             2
         )
 
-        # --- Safety-net / confidence-calibration metrics ---
-        # These answer a different question than "is the extraction
-        # right" -- they answer "when the pipeline IS wrong, does the
-        # confidence score / human-review flag actually catch it?" This
-        # matters more for a medical safety project than raw accuracy
-        # alone, since a wrong-but-unflagged extraction is the actual
-        # patient-harm scenario.
         avg_confidence_correct = (
             round(self.correct_confidence_sum / self.correct_count, 3)
             if self.correct_count > 0 else None
@@ -192,15 +150,12 @@ class EvaluationMetrics:
             round(self.incorrect_confidence_sum / self.incorrect_count, 3)
             if self.incorrect_count > 0 else None
         )
-        # Of everything the pipeline got wrong (wrong drug or wrong dose,
-        # or a hallucinated medicine), what fraction did it flag as
-        # low-confidence / needing human review?
+
         human_review_catch_rate = (
             round((self.incorrect_flagged_count / self.incorrect_count) * 100, 2)
             if self.incorrect_count > 0 else None
         )
-        # The inverse and more important number for a safety writeup: how
-        # often is the pipeline confidently wrong with no safety net?
+
         false_reassurance_rate = (
             round(100 - human_review_catch_rate, 2)
             if human_review_catch_rate is not None else None
@@ -301,9 +256,6 @@ class PrescriptionEvaluator:
         if not self.ground_truth_path.exists():
             raise FileNotFoundError(f"Ground truth not found: {self.ground_truth_path}")
         
-        # utf-8-sig strips a leading BOM character if present, which otherwise
-        # corrupts the first column name (e.g. 'image_path' becomes
-        # '\ufeffimage_path') and breaks every column lookup against it.
         df = pd.read_csv(self.ground_truth_path, encoding='utf-8-sig')
         df.columns = [c.strip() for c in df.columns]
         
@@ -368,23 +320,7 @@ class PrescriptionEvaluator:
         truth_frequency_norm = normalize_field('frequency', truth_frequency)
         pred_duration_norm = normalize_field('duration', pred_duration)
         truth_duration_norm = normalize_field('duration', truth_duration)
-
-        # --- Medicine name: semantic match, not literal string equality ---
-        # Ground truth often includes dosage-form/route words (e.g. "Syr X",
-        # "X Ear Drops") that the extraction prompt deliberately tells the
-        # model to omit. medicine_names_match() strips those words on both
-        # sides and falls back to fuzzy token-set similarity, so "Megacv
-        # Forte" and "Syr Megacv Forte" are correctly treated as the same
-        # medicine instead of being marked wrong purely due to formatting.
         name_match = medicine_names_match(pred_name_raw, truth_name_raw)
-
-        # --- Dosage: match on core strength + fuzzy, not literal equality ---
-        # Ground truth dosage strings frequently carry extra administration
-        # notes ("(take 1 tab)", "Day 1: 15 mL, Day 2: 7.5 mL") that the
-        # model was explicitly told not to reproduce. dosages_match() strips
-        # spacing/punctuation differences and compares the core
-        # "<number> <unit>" strength so equivalent doses aren't penalized
-        # for differing verbosity.
         dosage_match = dosages_match(pred_dosage_raw, truth_dosage_raw)
 
         results = {
@@ -400,10 +336,6 @@ class PrescriptionEvaluator:
             truth_tokens = set(truth_frequency_norm.lower().split())
             frequency_overlap = len(frequency_tokens & truth_tokens) / max(1, len(frequency_tokens | truth_tokens))
             results['frequency_match'] = frequency_overlap >= 0.5
-            # Jaccard overlap penalizes short phrases unfairly (e.g. "at
-            # bedtime" vs "bedtime" is only 50%). Fuzzy token-set ratio
-            # catches these near-identical phrasings the same way
-            # dosage/medicine_name matching already does elsewhere.
             if not results['frequency_match']:
                 results['frequency_match'] = fuzz.token_set_ratio(
                     pred_frequency_norm.lower(), truth_frequency_norm.lower()
@@ -425,19 +357,10 @@ class PrescriptionEvaluator:
         else:
             results['purpose_has_ground_truth'] = True
             if not results['purpose_match']:
-                # NOTE: previously did a local "from rapidfuzz import fuzz"
-                # here. Python treats any name assigned ANYWHERE in a
-                # function as local to the whole function, so that local
-                # import silently shadowed the module-level `fuzz` import
-                # used earlier in this same function (frequency/duration
-                # fuzzy fallback) -- causing UnboundLocalError there. `fuzz`
-                # is already imported at module level, so just use it.
                 results['purpose_match'] = fuzz.token_set_ratio(
                     pred_purpose.lower(), truth_purpose.lower()
                 ) >= 80
 
-        # Exact match: core identifying/dosing fields only. Purpose is
-        # excluded since ground truth doesn't actually contain it (see above).
         results['exact_match'] = all([
             results['medicine_name_match'],
             results['dosage_match'],
@@ -452,28 +375,7 @@ class PrescriptionEvaluator:
         predicted: Dict,
         ground_truth: Dict
     ) -> float:
-        """
-        Compute fuzzy similarity between normalized medicine names.
-
-        Parameters
-        ----------
-        predicted : dict
-            Predicted medicine dictionary
-        ground_truth : dict
-            Ground-truth medicine dictionary
-
-        Returns
-        -------
-        float
-            Similarity score in the range [0, 100]
-        """
-        # Strip dosage-form/route words (e.g. "Syr", "Ear Drops") before
-        # comparing -- ground truth carries them, the extraction prompt
-        # deliberately tells the model not to. Without this, a correctly
-        # identified medicine like "Megacv Forte" vs truth "Syr Megacv Forte"
-        # scores artificially low and gets treated as an unmatched
-        # prediction (i.e. counted as a hallucination) purely due to
-        # formatting, not because the medicine was actually wrong.
+        
         pred_name = strip_form_words(normalize_text(predicted.get('medicine_name', '')))
         truth_name = strip_form_words(normalize_text(ground_truth.get('medicine_name', '')))
 
@@ -482,8 +384,6 @@ class PrescriptionEvaluator:
         if not pred_name or not truth_name:
             return 0.0
 
-        # token_set_ratio (not token_sort_ratio) so that extra tokens
-        # present on only one side don't drag the score down.
         return float(fuzz.token_set_ratio(pred_name, truth_name))
 
     def _build_assignment_pairs(
@@ -491,26 +391,7 @@ class PrescriptionEvaluator:
         predicted_medicines: List[Dict],
         ground_truth_rows: List[Dict]
     ) -> List[Tuple[int, int]]:
-        """
-        Build optimal one-to-one matches between predictions and ground truth.
-
-        The matching is solved with the Hungarian algorithm over a cost matrix
-        built from fuzzy medicine-name similarity. Pairs below an empirical
-        threshold are treated as unmatched and left for false-positive / false-
-        negative accounting.
-
-        Parameters
-        ----------
-        predicted_medicines : list of dict
-            Predicted medicines for the image
-        ground_truth_rows : list of dict
-            Ground-truth medicines for the image
-
-        Returns
-        -------
-        list of tuple[int, int]
-            Accepted matched pairs as (prediction_index, ground_truth_index)
-        """
+        
         n_predicted = len(predicted_medicines)
         n_truth = len(ground_truth_rows)
 
@@ -518,10 +399,6 @@ class PrescriptionEvaluator:
             return []
 
         matching_penalty = 10000.0
-        # Lowered from 75 -> 70: now that names are compared with form-words
-        # stripped and token_set_ratio, genuine matches already score close
-        # to 100, so this only needs to catch real near-misses (minor OCR
-        # errors), not compensate for formatting differences anymore.
         matching_threshold = 70.0
         cost_matrix = np.full((n_predicted, n_truth), matching_penalty, dtype=float)
 
@@ -552,26 +429,7 @@ class PrescriptionEvaluator:
         ground_truth_rows: List[Dict],
         image_filename: Optional[str] = None
     ) -> Dict:
-        """
-        Evaluate a single image prediction against ground truth.
 
-        Predictions and ground-truth medicines are first aligned with an
-        optimal assignment based on fuzzy medicine-name similarity. Only after
-        this pairing is established are field-level comparisons executed for the
-        matched pairs.
-
-        Parameters
-        ----------
-        prediction : PrescriptionResponse
-            Pipeline prediction
-        ground_truth_rows : list of dict
-            Ground truth medicines for this image
-
-        Returns
-        -------
-        dict
-            Per-image evaluation results
-        """
         predicted_medicines = [
             med.model_dump() for med in prediction.extracted_medicines
         ]
@@ -591,23 +449,17 @@ class PrescriptionEvaluator:
             'frequency_correct': 0,
             'duration_correct': 0,
             'purpose_correct': 0,
-            'purpose_gradable': 0,  # pairs where ground truth actually had a purpose value
+            'purpose_gradable': 0,  
             'exact_matches': 0,
             'hallucinations': 0,
             'false_negatives': 0,
             'processing_time': prediction.extraction_time_seconds or 0.0,
             'used_fallback': prediction.fallback_model_used,
-
-            # Safety-net tracking (see EvaluationMetrics for definitions)
             'correct_confidence_sum': 0.0,
             'correct_count': 0,
             'incorrect_confidence_sum': 0.0,
             'incorrect_count': 0,
             'incorrect_flagged_count': 0,
-
-            # Raw predicted-vs-truth strings for every matched pair, plus
-            # every hallucination/false-negative, so failures can actually
-            # be inspected instead of guessed at from aggregate counts.
             'debug_rows': [],
         }
 
@@ -655,12 +507,6 @@ class PrescriptionEvaluator:
                     results['purpose_correct'] += 1
             if comparison['exact_match']:
                 results['exact_matches'] += 1
-
-            # Clinically correct = right drug AND right dose. This is the
-            # bar used for the confidence-calibration / human-review
-            # safety-net metrics -- deliberately stricter than "matched",
-            # since a matched-but-wrong-dose prediction is still a safety
-            # risk that should be caught by the confidence flag.
             is_clinically_correct = comparison['medicine_name_match'] and comparison['dosage_match']
             confidence = float(pred_med.get('confidence', 0.0) or 0.0)
             flagged = bool(pred_med.get('low_confidence') or pred_med.get('requires_human_review'))
@@ -674,10 +520,6 @@ class PrescriptionEvaluator:
                 if flagged:
                     results['incorrect_flagged_count'] += 1
 
-        # Predictions that never matched anything in ground truth
-        # (hallucinations) are unambiguously incorrect -- include them in
-        # the safety-net accounting too, since a hallucinated medicine that
-        # ISN'T flagged for review is the worst-case failure mode.
         for pred_idx, pred_med in enumerate(predicted_medicines):
             if pred_idx in matched_pred_indices:
                 continue
@@ -705,10 +547,6 @@ class PrescriptionEvaluator:
                 'confidence': confidence,
             })
 
-        # Ground-truth medicines that never got matched to any prediction
-        # (false negatives / missed medicines) -- capture these too, since
-        # a missed medicine and a hallucinated one look identical in the
-        # aggregate counts but need opposite fixes.
         for truth_idx, truth_med in enumerate(ground_truth_rows):
             if truth_idx in matched_truth_indices:
                 continue
@@ -740,21 +578,6 @@ class PrescriptionEvaluator:
         skip_fallback: bool = False,
         limit: Optional[int] = None
     ) -> Tuple[EvaluationMetrics, pd.DataFrame]:
-        """
-        Run complete evaluation on all images.
-        
-        Parameters
-        ----------
-        skip_fallback : bool, optional
-            Skip fallback verification for faster evaluation, by default False
-        limit : int, optional
-            Limit number of images to evaluate (for testing), by default None
-        
-        Returns
-        -------
-        tuple of (EvaluationMetrics, pd.DataFrame)
-            Aggregate metrics and per-image results DataFrame
-        """
         logger.info("="*70)
         logger.info("STARTING EVALUATION")
         logger.info("="*70)
@@ -784,7 +607,7 @@ class PrescriptionEvaluator:
                 )
                 
                 # Get corresponding ground truth
-                image_key = image_path.stem  # e.g., "rx_01"
+                image_key = image_path.stem  
                 truth_rows = ground_truth_df[
                     ground_truth_df['image_path'] == image_path.name
                 ].to_dict('records')
@@ -816,10 +639,6 @@ class PrescriptionEvaluator:
                 metrics.hallucinations += image_results['hallucinations']
                 metrics.false_negatives += image_results['false_negatives']
                 metrics.total_inference_time += image_results['processing_time']
-
-                # Pull debug rows out into their own collection -- they
-                # don't belong in the per-image summary CSV (variable-length
-                # list per row), and are exported separately.
                 metrics.debug_rows.extend(image_results.pop('debug_rows', []))
 
                 metrics.per_image_results.append(image_results)
@@ -830,14 +649,6 @@ class PrescriptionEvaluator:
                 )
             
             except Exception as e:
-                # NOTE: previously, any failure here (e.g. a Groq 429 rate
-                # limit) silently dropped the image from the whole
-                # evaluation, which is why only 18/27 images were scored
-                # last run. _call_groq_vision() in extraction.py now retries
-                # rate-limit errors with backoff before ever raising, so
-                # this branch should only fire for genuine, non-recoverable
-                # failures -- but it's logged loudly either way so it can't
-                # go unnoticed again.
                 logger.error(
                     f"SKIPPING {image_path.name} -- this will reduce total_images "
                     f"below the full dataset size. Reason: {e}",
@@ -845,8 +656,6 @@ class PrescriptionEvaluator:
                 )
                 continue
 
-            # Small pacing delay between images to stay well under Groq's
-            # free-tier rate limit, independent of the per-call retry logic.
             await asyncio.sleep(get_config().inter_request_delay_seconds)
         
         # Convert per-image results to DataFrame
@@ -863,30 +672,11 @@ class PrescriptionEvaluator:
         metrics: EvaluationMetrics,
         results_df: pd.DataFrame
     ) -> Tuple[Path, Path]:
-        """
-        Export evaluation results to CSV and JSON.
         
-        Parameters
-        ----------
-        metrics : EvaluationMetrics
-            Aggregate metrics
-        results_df : pd.DataFrame
-            Per-image results
-        
-        Returns
-        -------
-        tuple of (Path, Path)
-            Paths to exported CSV and JSON files
-        """
         # Export per-image results to CSV
         csv_path = self.outputs_dir / 'evaluation_report.csv'
         results_df.to_csv(csv_path, index=False)
         logger.info(f"Exported per-image results: {csv_path}")
-
-        # Export field-level mismatch debug data -- the actual predicted vs
-        # ground-truth strings for every matched pair, hallucination, and
-        # missed medicine. This is what actually shows WHY a field failed,
-        # instead of just that it failed.
         debug_path = self.outputs_dir / 'field_debug.csv'
         if metrics.debug_rows:
             debug_df = pd.DataFrame(metrics.debug_rows)
@@ -925,26 +715,7 @@ async def run_full_evaluation(
     skip_fallback: bool = False,
     limit: Optional[int] = None
 ) -> Dict:
-    """
-    Run complete evaluation and export results.
-    
-    Parameters
-    ----------
-    skip_fallback : bool, optional
-        Skip fallback for faster evaluation, by default False
-    limit : int, optional
-        Limit number of images, by default None
-    
-    Returns
-    -------
-    dict
-        Summary metrics
-    
-    Examples
-    --------
-    >>> summary = await run_full_evaluation(limit=5)
-    >>> print(f"F1 Score: {summary['f1_score']}")
-    """
+
     evaluator = PrescriptionEvaluator()
     metrics, results_df = await evaluator.run_evaluation(
         skip_fallback=skip_fallback,

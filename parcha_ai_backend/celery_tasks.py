@@ -1,13 +1,4 @@
 
-"""
-Celery task definitions for ParchaAI (Week 4).
-
-There is exactly one task: run the full image -> extraction -> Urdu ->
-audio chain (UrduPipeline, built in Week 1-3) for one prescription, and
-write the result (or error) back to the prescriptions table so the
-FastAPI /status and /result endpoints can serve it.
-"""
-
 import asyncio
 import json
 import logging
@@ -50,9 +41,6 @@ def process_prescription_task(self, prescription_id: str, image_path: str) -> di
         record.status = "processing"
         db.commit()
 
-        # UrduPipeline.process_image is async; Celery tasks are sync, so we
-        # run our own event loop here. A fresh UrduPipeline() per task is
-        # intentional -- avoids sharing HTTP clients/state across workers.
         pipeline = UrduPipeline()
         result = asyncio.run(pipeline.process_image(image_path))
 
@@ -69,9 +57,6 @@ def process_prescription_task(self, prescription_id: str, image_path: str) -> di
         record.status = "failed"
         record.error_message = str(exc)
         db.commit()
-        # Don't re-raise: we've already recorded the failure in the DB,
-        # which is what /status and /result read from. Re-raising would
-        # only make Celery log a second, redundant traceback.
         return {"status": "failed", "prescription_id": prescription_id, "error": str(exc)}
 
     finally:

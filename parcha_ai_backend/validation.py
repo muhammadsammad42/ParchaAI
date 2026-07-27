@@ -1,14 +1,3 @@
-"""
-Pydantic V2 validation schemas for ParchaAI prescription extraction pipeline.
-
-This module defines the complete data models for prescription extraction results,
-including all 11 target fields plus metadata and status tracking flags.
-
-Key Models
-----------
-- MedicineDetail: Complete medicine information with all 11 fields
-- PrescriptionResponse: Root response model containing list of medicines
-"""
 
 from typing import List, Optional
 from datetime import datetime
@@ -17,18 +6,7 @@ from pathlib import Path
 
 
 def normalize_null(value) -> str:
-    """Normalize null-like values to 'unread' string.
-    
-    Parameters
-    ----------
-    value : any
-        Value to normalize
-    
-    Returns
-    -------
-    str
-        Normalized value or 'unread'
-    """
+
     if value is None:
         return "unread"
     
@@ -45,68 +23,6 @@ def normalize_null(value) -> str:
 
 
 class MedicineDetail(BaseModel):
-    """
-    Complete medicine information model with all 11 target fields.
-    
-    This model represents a single extracted medicine with:
-    - 5 extracted fields (from prescription image)
-    - 5 enriched fields (from database/API lookups)
-    - 1 computed field (confidence score)
-    - 4 status tracking flags
-    
-    Attributes
-    ----------
-    medicine_name : str
-        Brand or generic name of the medicine (REQUIRED, extracted from image)
-    dosage : str
-        Strength/amount (e.g., "625mg", "5ml"), extracted from image
-    frequency : str
-        Dosing schedule (e.g., "1-0-1", "twice daily"), extracted from image
-    duration : str
-        Treatment length (e.g., "5 days", "2 weeks"), extracted from image
-    purpose : str
-        Indication/reason for medication, extracted from image
-    composition : str
-        Active pharmaceutical ingredients, from database
-    uses : str
-        Medical uses/indications, from database
-    side_effects : str
-        Known adverse effects, from database or FDA
-    precautions : str
-        Warnings and contraindications, from FDA API
-    manufacturer : str
-        Manufacturing company name, from database
-    confidence : float
-        Extraction quality score (0.0 to 1.0), computed
-    found_in_local_db : bool
-        Whether medicine was matched in local database
-    found_in_openfda : bool
-        Whether medicine was found in OpenFDA API
-    low_confidence : bool
-        Flag indicating confidence below threshold
-    requires_human_review : bool
-        Flag indicating manual review needed
-    
-    Examples
-    --------
-     med = MedicineDetail(
-         medicine_name="Augmentin",
-         dosage="625mg",
-         frequency="1-0-1",
-         duration="5 days",
-         purpose="bacterial infection",
-         composition="Amoxycillin (500mg) + Clavulanic Acid (125mg)",
-         uses="Treatment of Bacterial infections",
-         side_effects="Nausea, Vomiting, Diarrhea",
-         precautions="Take with food",
-         manufacturer="GSK",
-         confidence=0.92,
-         found_in_local_db=True,
-         found_in_openfda=False,
-         low_confidence=False,
-         requires_human_review=False
-     )
-    """
     
     model_config = ConfigDict(
         str_strip_whitespace=True,
@@ -363,42 +279,6 @@ class MedicineDetail(BaseModel):
 
 
 class PrescriptionResponse(BaseModel):
-    """
-    Root response model for prescription extraction results.
-    
-    This model contains metadata about the prescription and a list of
-    all medicines extracted from it.
-    
-    Attributes
-    ----------
-    prescription_id : str
-        Unique identifier for this prescription (typically filename)
-    image_path : Optional[str]
-        Path to the prescription image file
-    extraction_timestamp : datetime
-        When the extraction was performed
-    extracted_medicines : List[MedicineDetail]
-        List of all medicines extracted from this prescription
-    total_medicines : int
-        Count of medicines extracted (auto-computed)
-    average_confidence : float
-        Average confidence across all medicines (auto-computed)
-    requires_review : bool
-        Whether any medicine requires human review (auto-computed)
-    extraction_time_seconds : Optional[float]
-        Time taken for extraction in seconds
-    fallback_model_used : bool
-        Whether fallback/verification model was triggered
-    
-    Examples
-    --------
-     response = PrescriptionResponse(
-         prescription_id="rx_01.jpg",
-         image_path="/path/to/rx_01.jpg",
-         extracted_medicines=[med1, med2, med3]
-     )
-    """
-    
     model_config = ConfigDict(
         str_strip_whitespace=True,
         validate_assignment=True,
@@ -606,30 +486,7 @@ def create_medicine_from_extraction(
     extraction_data: dict,
     confidence: float = 0.0
 ) -> MedicineDetail:
-    """Create a MedicineDetail instance from raw extraction data.
-    
-    Parameters
-    ----------
-    extraction_data : dict
-        Dictionary containing extracted fields
-    confidence : float, optional
-        Confidence score, by default 0.0
-    
-    Returns
-    -------
-    MedicineDetail
-        Validated medicine instance
-    
-    Examples
-    --------
-     data = {
-         "medicine_name": "Augmentin",
-         "dosage": "625mg",
-         "frequency": "twice daily",
-         "duration": "5 days"
-     }
-     med = create_medicine_from_extraction(data, confidence=0.9)
-    """
+
     return MedicineDetail(
         medicine_name=extraction_data.get("medicine_name", ""),
         dosage=extraction_data.get("dosage", "unread"),

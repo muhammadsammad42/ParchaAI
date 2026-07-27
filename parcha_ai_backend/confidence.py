@@ -1,15 +1,3 @@
-"""
-Confidence scoring and routing logic for ParchaAI.
-
-This module calculates unified confidence scores and determines
-whether to trigger fallback verification.
-
-Confidence factors:
-- Database match scores (RapidFuzz)
-- Field completeness
-- Database validation results
-- Model consistency
-"""
 
 import logging
 from typing import Dict, List, Optional, Tuple
@@ -47,72 +35,12 @@ class ConfidenceScorer:
         medicine: MedicineDetail,
         fuzzy_score: Optional[float] = None
     ) -> float:
-        """
-        Calculate confidence score for a single medicine.
 
-        Scoring factors (FIX -- see rationale below):
-        - Model's own self-reported extraction confidence: 0.55 (the ONLY
-          signal that actually reflects handwriting legibility)
-        - Extracted-field completeness: 0.20 (of the 5 fields the extraction
-          step actually controls: name/dosage/frequency/duration/purpose)
-        - Database corroboration bonus: up to +0.25 (additive, NOT a
-          prerequisite)
-
-        RATIONALE FOR THE REWRITE
-        --------------------------
-        The previous formula spent 40% of the score on "found in local DB",
-        30% on a fuzzy-match score that is simply absent (0) whenever no DB
-        match clears the cutoff, and 30% on "field completeness" computed
-        across all 10 fields -- including composition/uses/side_effects/
-        precautions/manufacturer, which are *by design* always "unread"
-        until a database match succeeds (see prompts.py: the extraction
-        model is explicitly told to always write "unread" for these). That
-        meant a real, clearly-written medicine that simply isn't in an
-        11k-row reference CSV or in OpenFDA (extremely common for local-
-        market brand names) was mathematically capped at ~0.0-0.15
-        confidence no matter how legible the handwriting was -- exactly the
-        0.03-0.15 scores observed in production logs, which then caused
-        `_filter_medicines` to delete those (correctly-read) medicines
-        outright as "hallucinations". This conflated "not in our database"
-        with "probably wrong", which are not the same thing.
-
-        The model is explicitly asked, per medicine, to self-report how
-        confident it is based on handwriting legibility -- but that value
-        was being discarded (hardcoded to 0.0) before it ever reached this
-        function. It's now the dominant factor here, with database presence
-        treated as a corroborating bonus rather than a near-total
-        requirement.
-
-        Parameters
-        ----------
-        medicine : MedicineDetail
-            Medicine object to score
-        fuzzy_score : float, optional
-            RapidFuzz match score (0-100), if available
-
-        Returns
-        -------
-        float
-            Confidence score between 0.0 and 1.0
-        """
-        # Factor 1 (55%): the model's own self-reported confidence at
-        # extraction time. This is the primary signal for "was this legible
-        # handwriting", independent of whether a downstream database happens
-        # to carry this particular brand.
         score = medicine.extraction_confidence * 0.55
 
-        # Factor 2 (20%): completeness of the fields the extraction step
-        # actually controls. Enrichment fields are intentionally excluded --
-        # they measure database coverage, not extraction quality, and are
-        # always "unread" pre-enrichment regardless of how well the image
-        # was read.
         completeness_score = self._calculate_completeness(medicine)
         score += completeness_score * 0.20
 
-        # Factor 3 (up to +0.25, additive): database corroboration. This
-        # BOOSTS confidence when available rather than being a prerequisite
-        # for a reasonable score -- absence of a DB match now costs at most
-        # 0.25, not the ~0.70 it effectively cost before.
         db_bonus = 0.0
         if medicine.found_in_local_db:
             db_bonus += 0.15
@@ -138,25 +66,10 @@ class ConfidenceScorer:
         """
         Calculate field completeness ratio.
 
-        FIX: previously this counted all 10 fields, including the 5
-        enrichment fields (composition/uses/side_effects/precautions/
-        manufacturer) that are always "unread" until a database match
-        succeeds -- see prompts.py, where the extraction model is
-        explicitly instructed to always write "unread" for these. Counting
-        them here meant this factor was really re-measuring database
-        coverage a second time (on top of the DB-match factor), not
-        extraction quality. Now only the 5 fields the vision model actually
-        fills in from the image are counted.
-
         Parameters
         ----------
         medicine : MedicineDetail
             Medicine object
-        
-        Returns
-        -------
-        float
-            Completeness ratio (0.0 to 1.0)
         """
         # Only the fields the extraction step itself is responsible for.
         fields = [
@@ -190,11 +103,6 @@ class ConfidenceScorer:
             All extracted medicines
         fuzzy_scores : dict, optional
             Mapping of medicine_name -> fuzzy_score
-        
-        Returns
-        -------
-        float
-            Overall confidence score (0.0 to 1.0)
         """
         if not medicines:
             logger.warning("No medicines to score")
@@ -286,19 +194,6 @@ class ConfidenceScorer:
 
 
 class FallbackRouter:
-    """
-    Routes extraction to fallback model when confidence is low.
-    
-    This class implements the ONE verification pass rule:
-    - If primary confidence < threshold, call fallback ONCE
-    - Use fallback ONLY to add medicines primary genuinely missed (recall)
-    - Never let fallback overwrite primary's own extracted field values
-    """
-    
-    # FIX (qwen migration): minimum self-reported extraction_confidence a
-    # fallback-only medicine must have before we add it to the final list.
-    # Prevents a weaker fallback model's low-confidence guesses from
-    # inflating the hallucination rate.
     MIN_FALLBACK_ADD_CONFIDENCE = 0.6
 
     def __init__(self, confidence_threshold: float = 0.85):
@@ -350,57 +245,7 @@ class FallbackRouter:
         fuzzy_scores_primary: Optional[Dict[str, float]] = None,
         fuzzy_scores_fallback: Optional[Dict[str, float]] = None
     ) -> Tuple[List[MedicineDetail], bool]:
-        """
-        Merge primary and fallback results -- RECALL-ONLY, never overwrite.
-
-        FIX (qwen migration -- IMPORTANT):
-        The previous version of this method compared primary vs. fallback
-        wholesale on completeness/confidence and, if fallback "looked more
-        complete", swapped in fallback's ENTIRE medicine list in place of
-        primary's. That was tuned around llama-4-scout, which happened to
-        produce fallback extractions roughly on par with (or better than)
-        Gemini's primary pass.
-
-        With the current fallback model (qwen/qwen3.6-27b), that same logic
-        actively hurt accuracy: qwen fills in frequency/duration more often
-        than it should (making its output look "more complete" by this
-        metric) even when those fields are guesses rather than legible
-        reads, and it is less disciplined about the "unread" convention.
-        Since completeness doesn't measure correctness, the merge was
-        handing wins to a worse-but-fuller-looking extraction -- which is
-        exactly why frequency_accuracy, duration_accuracy, hallucination_rate,
-        and average confidence all regressed together the moment the Groq
-        parse error was fixed and this logic actually started firing.
-
-        NEW STRATEGY: Gemini (primary) is the trusted extractor. Its
-        per-medicine field values are NEVER overwritten by fallback. The
-        fallback model is used strictly to catch RECALL misses: any
-        fallback medicine that doesn't fuzzy-match anything already in
-        primary is treated as a possible missed medicine and ADDED to the
-        final list -- but only if the fallback model itself reported
-        reasonable confidence in it (>= MIN_FALLBACK_ADD_CONFIDENCE),
-        which keeps a low-confidence fallback guess from inflating the
-        hallucination rate.
-
-        Parameters
-        ----------
-        primary_medicines : list of MedicineDetail
-            Primary extraction results
-        fallback_medicines : list of MedicineDetail
-            Fallback extraction results, already run through the same
-            validation/enrichment pipeline as the primary results (i.e.
-            local DB + OpenFDA lookups already applied)
-        fuzzy_scores_primary : dict, optional
-            Fuzzy scores for primary
-        fuzzy_scores_fallback : dict, optional
-            Fuzzy scores for fallback
-
-        Returns
-        -------
-        tuple of (list, bool)
-            (final_medicines, fallback_contributed) -- the second value is
-            True only if fallback actually added a medicine primary missed.
-        """
+        
         logger.info("Merging primary and fallback results (recall-only, no overwrite)")
 
         if not fallback_medicines:
@@ -412,9 +257,6 @@ class FallbackRouter:
             self.fallback_called = True
             return final_medicines, False
 
-        # Identify fallback medicines that do NOT correspond to anything
-        # already present in primary (by fuzzy medicine-name match, same
-        # matcher the evaluator uses for ground-truth comparison).
         unmatched_fallback = []
         for fb_med in fallback_medicines:
             already_present = any(
@@ -424,10 +266,6 @@ class FallbackRouter:
             if not already_present:
                 unmatched_fallback.append(fb_med)
 
-        # Of those, only add ones the fallback model itself was reasonably
-        # confident about -- an unmatched medicine the model itself flagged
-        # as low-confidence is exactly the kind of guess that inflates
-        # hallucination_rate without a real recall benefit.
         added = [
             m for m in unmatched_fallback
             if m.extraction_confidence >= self.MIN_FALLBACK_ADD_CONFIDENCE
@@ -556,12 +394,6 @@ def calculate_confidence(
     -------
     tuple of (float, bool)
         (confidence_score, should_trigger_fallback)
-    
-    Examples
-    --------
-    >>> confidence, trigger = calculate_confidence(medicines, fuzzy_scores)
-    >>> if trigger:
-    ...     print(f"Low confidence ({confidence:.2f}) - fallback needed")
     """
     scorer = ConfidenceScorer(threshold=threshold)
     confidence = scorer.calculate_prescription_confidence(medicines, fuzzy_scores)

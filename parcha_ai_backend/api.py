@@ -1,20 +1,12 @@
 
 """
-FastAPI backend for the ParchaAI Flutter app (Week 4).
-
-Named `api.py` (not `main.py`) to avoid colliding with the existing CLI
-entry point at parcha_ai/main.py.
+FastAPI backend for the ParchaAI Flutter app
 
 Flow the Flutter app follows:
-    1. POST /upload           -> {"prescription_id": "...", "status": "pending"}
-    2. GET  /status/{id}      -> poll until status is "done" or "failed"
-    3. GET  /result/{id}      -> once done: medicines, Urdu text, audio URLs
+    1. POST /upload    
+    2. GET  /status/{id}
+    3. GET  /result/{id}  
 
-Run locally with:
-    uvicorn parcha_ai.api:app --reload --host 0.0.0.0 --port 8000
-
-Also requires a Celery worker running against the same Redis instance:
-    celery -A parcha_ai.celery_app worker --loglevel=info --concurrency=2
 
 And Redis itself running (local `redis-server`, or a free-tier hosted Redis).
 """
@@ -44,9 +36,6 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# CORS: wide open for dev so the Flutter app (emulator / physical device /
-# Flutter web) can call the API from any origin. Tighten allow_origins to
-# your actual app's origin(s) before shipping to real users.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -55,12 +44,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Static audio serving ---------------------------------------------------
-# TextToSpeechEngine writes .mp3 files under config.outputs_dir / "audio".
-# Mounting that directory means a stored path like
-#   /home/.../outputs/audio/<id>_00_augmentin.mp3
-# becomes reachable at
-#   http://<host>:8000/audio/<id>_00_augmentin.mp3
 AUDIO_DIR = config.outputs_dir / "audio"
 AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/audio", StaticFiles(directory=str(AUDIO_DIR)), name="audio")
@@ -195,9 +178,6 @@ async def get_result(prescription_id: str, request: Request, db: Session = Depen
 
 @app.delete("/prescription/{prescription_id}")
 async def delete_prescription(prescription_id: str, db: Session = Depends(get_db)):
-    """Optional cleanup endpoint: remove a prescription record (does not
-    delete the underlying image/audio files, which are cheap to leave on
-    disk and useful for debugging during development)."""
     record = db.query(Prescription).filter_by(id=prescription_id).first()
     if record is None:
         raise HTTPException(status_code=404, detail="Prescription not found")

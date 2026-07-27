@@ -1,13 +1,3 @@
-"""
-RapidFuzz-based medicine matching against local drug reference database.
-
-This module provides fuzzy string matching to:
-1. Correct VLM/handwriting recognition errors in medicine names
-2. Retrieve metadata (composition, uses, side effects, manufacturer) from database
-3. Reduce hallucination rate by validating against known medicines
-
-The matcher uses the cleaned 11,000+ South Asian medicine database.
-"""
 
 import logging
 import re
@@ -215,13 +205,6 @@ class MedicineMatcher:
                 'query': str                 # Original query
             }
         
-        Examples
-        --------
-        >>> matcher = MedicineMatcher()
-        >>> result = matcher.match_medicine("Augmentin")
-        >>> if result:
-        ...     print(f"Corrected: {result['official_name']}")
-        ...     print(f"Match score: {result['match_score']}")
         """
         if not query or not isinstance(query, str):
             logger.warning(f"Invalid query: {query}")
@@ -297,7 +280,6 @@ class MedicineMatcher:
         if matches.empty:
             return None
         
-        # Get first match (should be only one after deduplication)
         record = matches.iloc[0].to_dict()
         
         # Normalize null values to "unread"
@@ -314,38 +296,7 @@ class MedicineMatcher:
         medicine: MedicineDetail,
         auto_correct_name: bool = True
     ) -> MedicineDetail:
-        """
-        Enrich a MedicineDetail object with database information.
         
-        This method:
-        1. Matches the medicine name against the database
-        2. Auto-corrects the name if a match is found (optional)
-        3. Fills in composition, uses, side_effects, manufacturer
-        4. Sets found_in_local_db flag
-        
-        Parameters
-        ----------
-        medicine : MedicineDetail
-            Medicine object to enrich
-        auto_correct_name : bool, optional
-            Whether to correct the medicine name with the official name,
-            by default True
-        
-        Returns
-        -------
-        MedicineDetail
-            Enriched medicine object (modified in place and returned)
-        
-        Examples
-        --------
-        >>> matcher = MedicineMatcher()
-        >>> med = MedicineDetail(medicine_name="Augmentin", dosage="625mg")
-        >>> enriched = matcher.enrich_medicine(med)
-        >>> print(enriched.composition)
-        'Amoxycillin (500mg) + Clavulanic Acid (125mg)'
-        >>> print(enriched.found_in_local_db)
-        True
-        """
         # Attempt to match medicine
         match_result = self.match_medicine(medicine.medicine_name)
         
@@ -396,12 +347,6 @@ class MedicineMatcher:
         dict
             Mapping of query -> match result (or None)
         
-        Examples
-        --------
-        >>> matcher = MedicineMatcher()
-        >>> results = matcher.batch_match(["Augmentin", "Paracetamol", "XYZ123"])
-        >>> print(results["Augmentin"]["official_name"])
-        'Augmentin 625 Duo Tablet'
         """
         results = {}
         
@@ -443,24 +388,11 @@ class MedicineMatcher:
 # CONVENIENCE FUNCTIONS
 # =============================================================================
 
-# Global matcher instance (singleton pattern)
 _global_matcher: Optional[MedicineMatcher] = None
 
 
 def get_matcher(reload: bool = False) -> MedicineMatcher:
-    """
-    Get or create the global MedicineMatcher instance.
-    
-    Parameters
-    ----------
-    reload : bool, optional
-        Force reload of the database, by default False
-    
-    Returns
-    -------
-    MedicineMatcher
-        Global matcher instance
-    """
+
     global _global_matcher
     
     if _global_matcher is None or reload:
@@ -470,49 +402,12 @@ def get_matcher(reload: bool = False) -> MedicineMatcher:
 
 
 def quick_match(query: str, score_cutoff: int = 80) -> Optional[Dict[str, any]]:
-    """
-    Quick medicine name matching using global matcher.
-    
-    Parameters
-    ----------
-    query : str
-        Medicine name to match
-    score_cutoff : int, optional
-        Minimum match score, by default 80
-    
-    Returns
-    -------
-    dict or None
-        Match result or None
-    
-    Examples
-    --------
-    >>> result = quick_match("Augmentin")
-    >>> if result:
-    ...     print(result['official_name'])
-    """
+
     matcher = get_matcher()
     return matcher.match_medicine(query, score_cutoff)
 
 
 def quick_enrich(medicine: MedicineDetail) -> MedicineDetail:
-    """
-    Quick enrichment using global matcher.
-    
-    Parameters
-    ----------
-    medicine : MedicineDetail
-        Medicine to enrich
-    
-    Returns
-    -------
-    MedicineDetail
-        Enriched medicine
-    
-    Examples
-    --------
-    >>> med = MedicineDetail(medicine_name="Augmentin", dosage="625mg")
-    >>> enriched = quick_enrich(med)
-    """
+
     matcher = get_matcher()
     return matcher.enrich_medicine(medicine)

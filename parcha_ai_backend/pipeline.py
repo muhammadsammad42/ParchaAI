@@ -70,26 +70,6 @@ class ParchaAIPipeline:
         fuzzy_score_cutoff: Optional[int] = None,
         name_correction_cutoff: int = 96
     ):
-        """
-        Initialize the pipeline with all components.
-        
-        Parameters
-        ----------
-        confidence_threshold : float, optional
-            Confidence threshold for fallback routing, by default 0.80 (was 0.85)
-        fuzzy_score_cutoff : int, optional
-            RapidFuzz score cutoff (0-100), by default 85
-            Score >= 85: Accept match and enrich composition/uses/side_effects/manufacturer
-            Score < 85: Reject match and apply UNIDENTIFIED DRUG SAFETY RULE
-        name_correction_cutoff : int, optional
-            Separate, stricter score cutoff (0-100) required before overwriting the
-            extracted medicine_name with the database's "official" name, by default 96.
-            Enrichment data (composition/side_effects/etc.) can tolerate a looser
-            match, but replacing the name the extraction actually saw needs to be
-            near-certain, otherwise unrelated drugs get swapped in (e.g. "Morphine"
-            incorrectly renamed to an unrelated tablet just because they scored 90
-            on a loose fuzzy comparison).
-        """
         logger.info("Initializing ParchaAI Pipeline")
         
         config = get_config()
@@ -140,12 +120,6 @@ class ParchaAIPipeline:
         ------
         PipelineError
             If processing fails at any stage
-        
-        Examples
-        --------
-        >>> pipeline = ParchaAIPipeline()
-        >>> result = await pipeline.process_image("prescription.jpg")
-        >>> print(f"Found {len(result.extracted_medicines)} medicines")
         """
         image_path = Path(image_path)
         start_time = time.time()
@@ -253,18 +227,6 @@ class ParchaAIPipeline:
             duration = normalize_field('duration', raw_med.get('duration', 'unread'))
             purpose = normalize_text(raw_med.get('purpose', 'unread'))
 
-            # The extraction prompt explicitly tells the model to write
-            # "unread" for medicine_name when a line is illegible (this is
-            # intentional anti-hallucination behavior -- see prompts.py
-            # EXAMPLE 5 "Exclude Uncertain Lines"). But MedicineDetail's
-            # validator forbids medicine_name="unread". Previously that
-            # ValidationError was never caught here, so it propagated all
-            # the way up through _validate_medicines -> process_image and
-            # crashed the ENTIRE image -- discarding every other correctly
-            # read medicine on the same prescription along with it. Since
-            # the model already told us it couldn't read this one line, the
-            # correct behavior is to drop just this entry and keep going,
-            # not to lose the whole image.
             if medicine_name == 'unread':
                 logger.warning(
                     "Dropping one medicine entry with unread medicine_name "
@@ -272,17 +234,6 @@ class ParchaAIPipeline:
                     "this image are still processed normally."
                 )
                 return None
-
-            # FIX: the extraction prompt explicitly asks the model for a
-            # self-assessed confidence per medicine ("Low (0.0-0.5): Difficult
-            # handwriting, multiple 'unread' fields"). That's the one signal
-            # that actually reflects OCR/handwriting legibility. Previously it
-            # was read here and then discarded (confidence was hardcoded to
-            # 0.0 below), so the final confidence score -- and therefore the
-            # hallucination filter -- never had access to it at all and relied
-            # almost entirely on database-lookup success instead. Parse it
-            # defensively since it's LLM-provided and may be missing, a
-            # string, or out of range.
             raw_confidence = raw_med.get('confidence', 0.5)
             try:
                 extraction_confidence = float(raw_confidence)
@@ -310,9 +261,6 @@ class ParchaAIPipeline:
                     requires_human_review=False
                 )
             except Exception as e:
-                # Defensive catch-all: any other unexpected validation
-                # failure on a single medicine should not take down the
-                # whole image either.
                 logger.error(f"Skipping unprocessable medicine entry: {e}")
                 return None
 
@@ -324,18 +272,6 @@ class ParchaAIPipeline:
                 enrichment_task
             )
 
-            # Only trust a local DB match's *identity* -- and therefore its
-            # composition/uses/side_effects/manufacturer data -- once the
-            # score clears name_correction_cutoff (96). Below that, the
-            # matcher can pick an unrelated drug that happens to share
-            # leftover word fragments after normalization (e.g.
-            # "Azithromycin" -> "MY 360 Tablet" at score 90). Previously
-            # this code refused to rename the medicine at that range but
-            # STILL copied composition/uses/side_effects/manufacturer from
-            # that same uncertain match -- silently attaching one drug's
-            # medical info to a different drug's name. A score below the
-            # identity threshold means we're not confident it's the same
-            # drug at all, so none of its fields are trustworthy either.
             high_confidence_match = (
                 match_result and match_result['match_score'] >= self.name_correction_cutoff
             )
@@ -368,9 +304,6 @@ class ParchaAIPipeline:
                 return medicine
 
             if match_result and match_result['match_score'] >= self.fuzzy_score_cutoff:
-                # Real signal worth keeping for confidence scoring (the name
-                # is *somewhat* similar to something in the DB), but not
-                # confident enough to borrow that entry's medical data.
                 logger.info(
                     f"Match score {match_result['match_score']} for '{medicine_name}' below "
                     f"name_correction_cutoff={self.name_correction_cutoff} - not trusting "
@@ -401,8 +334,6 @@ class ParchaAIPipeline:
             processed_medicines = await asyncio.gather(
                 *[_process_single_med(raw_med) for raw_med in raw_medicines]
             )
-            # Drop the None placeholders for medicines that were skipped
-            # (unread name or other unprocessable entry) above.
             validated_medicines = [m for m in processed_medicines if m is not None]
 
         return validated_medicines, fuzzy_scores
@@ -433,8 +364,6 @@ class ParchaAIPipeline:
         tuple of (list, bool)
             Final medicines and whether fallback was used
         """
-        # Send only extraction fields: enrichment may be stale or unrelated to
-        # what is visibly written and should never bias the visual verifier.
         previous_medicines = [
             {
                 key: med.model_dump().get(key, 'unread')
@@ -466,9 +395,6 @@ class ParchaAIPipeline:
                 fallback_raw
             )
             
-            # Compare and merge (use the validated/enriched fallback medicines,
-            # not the raw unvalidated dicts, so a "fallback wins" decision
-            # actually carries over composition/uses/side_effects/precautions too)
             final_medicines, fallback_better = self.router.merge_fallback_results(
                 primary_medicines=primary_medicines,
                 fallback_medicines=fallback_medicines,
@@ -487,26 +413,6 @@ class ParchaAIPipeline:
             return final_medicines, False
     
     def _filter_medicines(self, medicines: List[MedicineDetail]) -> List[MedicineDetail]:
-        """
-        Remove likely hallucinations.
-
-        FIX: previously this dropped anything not found in local DB/OpenFDA
-        with computed confidence < 0.6. Because the old confidence formula
-        gave database presence ~70% combined weight (db-match + fuzzy-score
-        factors), that 0.6 cutoff was, in practice, almost impossible for a
-        real-but-undatabased medicine to clear -- local/regional brand names
-        not present in an 11k-row reference CSV or in OpenFDA were being
-        deleted wholesale regardless of how legibly they were written,
-        directly capping recall.
-
-        Now that `medicine.extraction_confidence` carries the model's own
-        self-reported read-confidence (see MedicineDetail / prompts.py), we
-        use THAT as the actual hallucination signal: a medicine is only
-        dropped when the model itself was unsure about it AND no database
-        corroborates it. A medicine the model read confidently is kept even
-        if no database happens to carry that brand -- that's a database
-        coverage gap, not evidence of hallucination.
-        """
         filtered = []
         for med in medicines:
             # Database corroboration is always sufficient to keep.
@@ -546,12 +452,6 @@ class ParchaAIPipeline:
         -------
         list of PrescriptionResponse
             Results for all images
-        
-        Examples
-        --------
-        >>> pipeline = ParchaAIPipeline()
-        >>> results = await pipeline.process_batch(["rx_01.jpg", "rx_02.jpg"])
-        >>> print(f"Processed {len(results)} prescriptions")
         """
         logger.info(f"Starting batch processing: {len(image_paths)} image(s)")
         
@@ -624,11 +524,6 @@ async def quick_process(
     -------
     PrescriptionResponse
         Complete prescription data
-    
-    Examples
-    --------
-    >>> result = await quick_process("prescription.jpg")
-    >>> print(result.model_dump_json(indent=2))
     """
     pipeline = ParchaAIPipeline()
     return await pipeline.process_image(image_path)
@@ -647,11 +542,5 @@ async def process_prescription_sync_wrapper(image_path: Union[str, Path]) -> Pre
     -------
     PrescriptionResponse
         Complete prescription data
-    
-    Examples
-    --------
-    >>> # From synchronous code
-    >>> import asyncio
-    >>> result = asyncio.run(process_prescription_sync_wrapper("rx.jpg"))
     """
     return await quick_process(image_path)

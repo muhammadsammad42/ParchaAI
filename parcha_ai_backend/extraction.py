@@ -22,11 +22,8 @@ import httpx
 from groq import AsyncGroq
 
 try:
-    # Available in modern groq SDK versions; used to specifically detect
-    # and retry rate-limit / transient errors instead of failing the whole
-    # fallback call immediately.
     from groq import RateLimitError, APIConnectionError, APIStatusError
-except ImportError:  # pragma: no cover - older groq SDK fallback
+except ImportError: 
     RateLimitError = APIConnectionError = APIStatusError = Exception
 
 from .config import get_config
@@ -45,31 +42,11 @@ class ExtractionError(Exception):
     pass
 
 
-# =============================================================================
-# REASONING-MODEL-AWARE RESPONSE CLEANUP
-#
-# FIX (qwen migration): qwen/qwen3.6-27b is a reasoning model. Depending on
-# SDK/endpoint version it may:
-#   (a) wrap its chain-of-thought in <think>...</think> (or <reasoning>/
-#       <analysis>) tags ahead of the actual JSON answer, or
-#   (b) simply write free-form reasoning prose before ever emitting a '{',
-#       with no wrapping tags at all.
-# llama-4-scout (the previous fallback model) never did this, so
-# parse_json_response() only ever had to handle a response that started
-# with either raw JSON or a ```json fence -- both assumed the JSON began at
-# character 0. That assumption is now false, which is exactly why every
-# fallback call was failing with "Expecting value: line 1 column 1
-# (char 0)": `content` was reasoning text, not JSON, at position 0.
-# =============================================================================
-
 _REASONING_TAG_PATTERN = re.compile(
     r"<(think|thinking|reasoning|analysis)\b[^>]*>.*?</\1>",
     re.IGNORECASE | re.DOTALL,
 )
 
-# Matches ```json ... ``` or ``` ... ``` fences ANYWHERE in the text (not
-# just at the very start), since a reasoning model may put prose before the
-# fence.
 _CODE_FENCE_PATTERN = re.compile(
     r"```(?:json)?\s*(.*?)```",
     re.IGNORECASE | re.DOTALL,
@@ -77,44 +54,16 @@ _CODE_FENCE_PATTERN = re.compile(
 
 
 def _strip_reasoning_wrapper(text: str) -> str:
-    """
-    Remove reasoning-model scaffolding (think tags, stray prose, code
-    fences) so the underlying JSON can be located and parsed.
-
-    This is intentionally defensive/best-effort: it never raises, and if
-    it can't find anything better than the original text, it just returns
-    the original text unchanged so downstream parsing/recovery still gets
-    a chance to run.
-
-    Parameters
-    ----------
-    text : str
-        Raw model response, already whitespace-stripped
-
-    Returns
-    -------
-    str
-        Text with reasoning scaffolding removed, ideally left containing
-        only the JSON payload
-    """
     cleaned = text
 
-    # 1. Drop explicit <think>/<reasoning>/<analysis> blocks entirely.
     cleaned = _REASONING_TAG_PATTERN.sub("", cleaned).strip()
 
-    # 2. If a ```json fence exists ANYWHERE (not just at position 0), the
-    #    content of that fence is almost always the intended answer -- pull
-    #    it out regardless of what prose precedes/follows it.
     fence_match = _CODE_FENCE_PATTERN.search(cleaned)
     if fence_match:
         fenced_content = fence_match.group(1).strip()
         if fenced_content:
             return fenced_content
-
-    # 3. No fence found. If there's leading prose before the JSON actually
-    #    starts (e.g. "Sure, here's the corrected extraction: {...}"),
-    #    trim everything before the first '{' or '['. Whichever bracket
-    #    appears first in the text is where the real payload begins.
+        
     if not cleaned.startswith("{") and not cleaned.startswith("["):
         brace_idx = cleaned.find("{")
         bracket_idx = cleaned.find("[")
@@ -126,25 +75,6 @@ def _strip_reasoning_wrapper(text: str) -> str:
 
 
 class GeminiVisionExtractor:
-    """
-    Handles two-pass extraction using Google Gemini's vision API
-    (v1beta generateContent REST endpoint).
-
-    This is the PRIMARY extractor. Pass 1 counts how many medicines are
-    written on the prescription; Pass 2 extracts full structured detail
-    for each one. Responses are cached to disk by image hash + pass
-    number, so a rerun on an unchanged image costs zero additional API
-    calls.
-
-    Attributes
-    ----------
-    api_key : str
-        Gemini API key
-    model : str
-        Vision model identifier
-    cache_dir : Path
-        Directory for response caching
-    """
 
     # Maps file extensions to the MIME types Gemini's inline_data expects.
     _MIME_TYPE_MAP = {
@@ -155,9 +85,6 @@ class GeminiVisionExtractor:
         'bmp': 'image/bmp',
         'webp': 'image/webp',
     }
-    # Bump when a prompt or image transformation changes the expected model
-    # output.  Cache entries intentionally retain their old files, but they
-    # must not silently mask an extraction-quality improvement on rerun.
     _CACHE_SCHEMA_VERSION = "v2_reviewed_schedule_prompt"
 
     def __init__(self):
@@ -182,12 +109,7 @@ class GeminiVisionExtractor:
         logger.info(f"Initialized GeminiVisionExtractor with model: {self.model}")
 
     def _get_mime_type(self, image_input) -> str:
-        """Resolve the MIME type Gemini expects from a file extension.
 
-        A preprocessed (upscaled/sharpened) numpy array has no extension --
-        it's always re-encoded as PNG by `encode_image_to_base64`, so it
-        maps to 'image/png'.
-        """
         if not isinstance(image_input, (str, Path)):
             return 'image/png'
         extension = Path(image_input).suffix.lower().lstrip('.')
@@ -211,21 +133,6 @@ class GeminiVisionExtractor:
             return hashlib.sha256(f.read()).hexdigest()
 
     def _get_cache_path(self, image_hash: str, pass_number: int) -> Path:
-        """
-        Get cache file path for a specific extraction pass.
-
-        Parameters
-        ----------
-        image_hash : str
-            Image hash
-        pass_number : int
-            1 for counting, 2 for extraction
-
-        Returns
-        -------
-        Path
-            Cache file path
-        """
         cache_filename = (
             f"{image_hash}_{self._CACHE_SCHEMA_VERSION}_pass{pass_number}.json"
         )
@@ -236,21 +143,7 @@ class GeminiVisionExtractor:
         image_hash: str,
         pass_number: int
     ) -> Optional[Dict[str, Any]]:
-        """
-        Load cached response if available.
 
-        Parameters
-        ----------
-        image_hash : str
-            Image hash
-        pass_number : int
-            Pass number
-
-        Returns
-        -------
-        dict or None
-            Cached response or None if not found
-        """
         cache_path = self._get_cache_path(image_hash, pass_number)
 
         if not cache_path.exists():
@@ -274,20 +167,7 @@ class GeminiVisionExtractor:
         response: str,
         elapsed: float
     ) -> None:
-        """
-        Save response to cache.
 
-        Parameters
-        ----------
-        image_hash : str
-            Image hash
-        pass_number : int
-            Pass number
-        response : str
-            Model response text
-        elapsed : float
-            Time taken in seconds
-        """
         cache_path = self._get_cache_path(image_hash, pass_number)
 
         try:
@@ -313,31 +193,7 @@ class GeminiVisionExtractor:
         temperature: float = 0.1,
         max_output_tokens: int = 2048
     ) -> Tuple[str, float]:
-        """
-        Call the Gemini generateContent API with an image + prompt.
 
-        Parameters
-        ----------
-        image_input : str, Path, or np.ndarray
-            Path to the image file, or an already-preprocessed image array,
-            to send
-        prompt : str
-            System/user prompt
-        temperature : float, optional
-            Model temperature, by default 0.1
-        max_output_tokens : int, optional
-            Max response tokens, by default 2048
-
-        Returns
-        -------
-        tuple of (str, float)
-            Response text and elapsed time in seconds
-
-        Raises
-        ------
-        ExtractionError
-            If the API call fails after all retries
-        """
         start_time = time.time()
         last_error: Optional[Exception] = None
 
@@ -371,10 +227,6 @@ class GeminiVisionExtractor:
             'Content-Type': 'application/json'
         }
 
-        # Retry loop: a rate-limit (429) or transient connection error is
-        # backed off and retried instead of failing the whole image
-        # immediately (mirrors the old Groq retry behavior, now applied to
-        # Gemini since it's the primary call made on every image).
         for attempt in range(self.max_retries + 1):
             try:
                 async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -396,13 +248,6 @@ class GeminiVisionExtractor:
                     raise ExtractionError("No content in Gemini response")
 
                 content = ''.join(text_parts)
-
-                # FIX (recall): a response cut off by the token limit
-                # (finishReason == "MAX_TOKENS") almost always means the
-                # JSON for a multi-medicine prescription got truncated
-                # mid-array. Surface this via a dedicated attribute so
-                # callers (pass2_extract_medicines) can retry once with a
-                # larger budget instead of losing the image outright.
                 if finish_reason == 'MAX_TOKENS':
                     logger.warning(
                         f"Gemini response was TRUNCATED (finishReason=MAX_TOKENS, "
@@ -457,9 +302,6 @@ class GeminiVisionExtractor:
                 break
 
             except ExtractionError:
-                # Truncation errors and "no content" errors should propagate
-                # immediately (caller decides how to handle truncation), not
-                # be retried in this loop.
                 raise
 
             except Exception as e:
@@ -474,19 +316,6 @@ class GeminiVisionExtractor:
 
     @staticmethod
     def _extract_retry_after(response: httpx.Response) -> Optional[float]:
-        """Read a Retry-After header off a Gemini API error response, if present.
-
-        Parameters
-        ----------
-        response : httpx.Response
-            The HTTP response from the failed Gemini call
-
-        Returns
-        -------
-        float or None
-            Seconds to wait as instructed by the server, or None if not
-            available (caller should fall back to exponential backoff)
-        """
         try:
             if response is not None and 'retry-after' in response.headers:
                 return float(response.headers['retry-after'])
@@ -498,24 +327,6 @@ class GeminiVisionExtractor:
         self,
         image_path: Union[str, Path]
     ) -> Tuple[int, float]:
-        """
-        Pass 1: Determine the exact count of medicines in prescription.
-
-        Parameters
-        ----------
-        image_path : str or Path
-            Path to prescription image
-
-        Returns
-        -------
-        tuple of (int, float)
-            Medicine count and elapsed time
-
-        Raises
-        ------
-        ExtractionError
-            If counting fails
-        """
         image_path = Path(image_path)
         image_hash = self._compute_image_hash(image_path)
 
@@ -548,26 +359,7 @@ class GeminiVisionExtractor:
         return count, elapsed
 
     def _parse_count_from_response(self, response: str) -> int:
-        """
-        Extract medicine count from Pass 1 response.
 
-        Parameters
-        ----------
-        response : str
-            Model response
-
-        Returns
-        -------
-        int
-            Medicine count
-
-        Raises
-        ------
-        ExtractionError
-            If count cannot be parsed
-        """
-        # Try to find number in response
-        # Patterns: "3 medicines", "count: 3", "total: 3", just "3"
         patterns = [
             r'(?:count|total|number)[:\s]+(\d+)',
             r'(\d+)\s+(?:medicine|medication|drug|item)',
@@ -578,10 +370,9 @@ class GeminiVisionExtractor:
             match = re.search(pattern, response.lower())
             if match:
                 count = int(match.group(1))
-                if 0 <= count <= 50:  # Sanity check
+                if 0 <= count <= 50:  
                     return count
 
-        # If all else fails, look for any number
         numbers = re.findall(r'\d+', response)
         if numbers:
             count = int(numbers[0])
@@ -596,26 +387,6 @@ class GeminiVisionExtractor:
         image_path: Union[str, Path],
         medicine_count: int
     ) -> Tuple[str, float]:
-        """
-        Pass 2: Extract structured data for all medicines.
-
-        Parameters
-        ----------
-        image_path : str or Path
-            Path to prescription image
-        medicine_count : int
-            Expected number of medicines (from Pass 1)
-
-        Returns
-        -------
-        tuple of (str, float)
-            Raw JSON response and elapsed time
-
-        Raises
-        ------
-        ExtractionError
-            If extraction fails
-        """
         image_path = Path(image_path)
         image_hash = self._compute_image_hash(image_path)
 
@@ -631,10 +402,6 @@ class GeminiVisionExtractor:
         # Get prompt
         prompt = get_extraction_prompt(medicine_count)
 
-        # Call API. Base budget comes from config.max_tokens (3200): each
-        # medicine object carries ~10 fields (5 "unread" enrichment fields
-        # alone add meaningful token overhead), so prescriptions with 4-5+
-        # medicines are easily cut off at a smaller budget.
         pass2_max_tokens = self.max_tokens
         try:
             response, elapsed = await self._call_gemini_vision(
@@ -645,10 +412,6 @@ class GeminiVisionExtractor:
             )
         except ExtractionError as e:
             if getattr(e, 'truncated', False):
-                # One retry with a much larger ceiling. This costs an extra
-                # API call only on the (rare) images dense enough to hit the
-                # first limit, which is a worthwhile trade against silently
-                # losing an entire prescription's worth of recall.
                 logger.warning(
                     f"Pass 2 truncated for {image_path.name}; retrying once "
                     f"with max_output_tokens=4096"
@@ -672,25 +435,6 @@ class GeminiVisionExtractor:
         self,
         image_path: Union[str, Path]
     ) -> Tuple[str, Dict[str, float]]:
-        """
-        Run complete two-pass extraction.
-
-        Parameters
-        ----------
-        image_path : str or Path
-            Path to prescription image
-
-        Returns
-        -------
-        tuple of (str, dict)
-            Raw JSON response and timing dict
-
-        Examples
-        --------
-        >>> extractor = GeminiVisionExtractor()
-        >>> json_response, timings = await extractor.extract("prescription.jpg")
-        >>> print(timings)  # {"pass1": 1.2, "pass2": 2.3, "total": 3.5}
-        """
         total_start = time.time()
 
         # Pass 1: Count
@@ -704,12 +448,6 @@ class GeminiVisionExtractor:
 
         parsed_medicines = parse_json_response(json_response)
         if len(parsed_medicines) > count:
-            # Pass 1 is a single quick glance used only to give Pass 2 a
-            # target, while Pass 2 actually reads the image line-by-line
-            # with the full anti-hallucination prompt. If Pass 1
-            # undercounts, we trust Pass 2's actual findings and only log
-            # the discrepancy for visibility -- truncating down to Pass 1's
-            # count would silently discard genuine medicines.
             logger.info(
                 f"Pass 2 found {len(parsed_medicines)} medicine(s), more than "
                 f"Pass 1's count of {count}. Keeping all of Pass 2's results "
@@ -729,15 +467,6 @@ class GeminiVisionExtractor:
 
 
 class GroqFallbackExtractor:
-    """
-    Fallback extractor using Groq Vision (qwen/qwen3.6-27b) via the Groq
-    SDK's async chat completions API.
-
-    This is called when the primary Gemini extraction has low confidence.
-    Only a single verification call is made (no two-pass counting), keeping
-    fallback usage light.
-
-    """
 
     def __init__(self):
         """Initialize Groq fallback extractor."""
@@ -767,25 +496,7 @@ class GroqFallbackExtractor:
         image_data_url: str,
         use_reasoning_param: bool
     ):
-        """
-        Issue a single chat.completions.create call, optionally including
-        the `reasoning_effort` parameter.
 
-        Parameters
-        ----------
-        prompt : str
-            Text prompt
-        image_data_url : str
-            Data URL for the image
-        use_reasoning_param : bool
-            Whether to include `reasoning_effort` in the request. Some
-            groq SDK versions / models may not accept it -- callers should
-            retry with this set to False if it fails.
-
-        Returns
-        -------
-        The raw SDK response object.
-        """
         kwargs = dict(
             model=self.model,
             messages=[
@@ -836,10 +547,6 @@ class GroqFallbackExtractor:
 
         logger.info(f"Calling Groq fallback for {Path(image_path).name}")
 
-        # A fallback should be a genuine review of the primary result, not an
-        # unrelated second extraction.  Giving Groq the primary records lets
-        # it retain good fields while concentrating visual attention on
-        # unread/ambiguous fields and missed lines.
         if previous_medicines is not None:
             previous_json = json.dumps(
                 {"medicines": previous_medicines}, ensure_ascii=False
@@ -850,12 +557,6 @@ class GroqFallbackExtractor:
             )
         else:
             prompt = get_extraction_prompt(medicine_count)
-        # Reinforce JSON-only, no-preamble output. This is a defense-in-depth
-        # addition on top of _strip_reasoning_wrapper()'s parsing-side fix --
-        # reasoning models sometimes need to be told explicitly not to add a
-        # conversational lead-in ("Sure, here's the corrected JSON:") even
-        # after their <think> block, and this costs nothing if the model
-        # already behaves.
         prompt = (
             prompt
             + "\n\nIMPORTANT: After you finish reasoning, output ONLY the "
@@ -866,9 +567,6 @@ class GroqFallbackExtractor:
 
         start_time = time.time()
         last_error: Optional[Exception] = None
-        # Tracks whether `reasoning_effort` is still being sent. Disabled
-        # permanently for the rest of this call if the SDK/model rejects it,
-        # so we don't keep re-triggering the same failure on every retry.
         use_reasoning_param = True
 
         for attempt in range(self.max_retries + 1):
@@ -878,9 +576,6 @@ class GroqFallbackExtractor:
                         prompt, image_data_url, use_reasoning_param
                     )
                 except TypeError as e:
-                    # Installed groq SDK version doesn't know about
-                    # `reasoning_effort` as a kwarg at all -- drop it and
-                    # retry immediately without burning a backoff attempt.
                     if use_reasoning_param:
                         logger.warning(
                             f"Groq SDK rejected 'reasoning_effort' param ({e}); "
@@ -893,8 +588,6 @@ class GroqFallbackExtractor:
                     else:
                         raise
                 except APIStatusError as e:
-                    # Model/endpoint-level rejection (HTTP 400) of the param,
-                    # as opposed to a client-side TypeError.
                     if use_reasoning_param and getattr(e, "status_code", None) == 400:
                         logger.warning(
                             f"Groq API rejected 'reasoning_effort' param ({e}); "
@@ -916,13 +609,6 @@ class GroqFallbackExtractor:
                 message = response.choices[0].message
                 content = getattr(message, "content", None)
                 content_stripped = content.strip() if content else ""
-
-                # FIX: an empty OR whitespace-only content string was
-                # previously falling through to `return content.strip()`
-                # (empty string), which parse_json_response() then failed
-                # on with a confusing "char 0" error instead of being
-                # treated as a clean fallback failure. Check the STRIPPED
-                # value, not the raw one.
                 if not content_stripped:
                     reasoning_text = getattr(message, "reasoning", None)
                     if reasoning_text:
@@ -972,19 +658,6 @@ class GroqFallbackExtractor:
 
     @staticmethod
     def _extract_retry_after(error: Exception) -> Optional[float]:
-        """Read a Retry-After header off a Groq API error, if present.
-
-        Parameters
-        ----------
-        error : Exception
-            The raised RateLimitError (or similar) from the groq SDK
-
-        Returns
-        -------
-        float or None
-            Seconds to wait as instructed by the server, or None if not
-            available (caller should fall back to exponential backoff)
-        """
         try:
             headers = getattr(getattr(error, 'response', None), 'headers', None)
             if headers and 'retry-after' in headers:
@@ -995,38 +668,9 @@ class GroqFallbackExtractor:
 
 
 def parse_json_response(response: str) -> List[Dict[str, Any]]:
-    """
-    Parse JSON from model response, handling markdown code blocks AND
-    reasoning-model scaffolding (think tags, leading prose before the
-    JSON, etc -- see _strip_reasoning_wrapper).
 
-    Parameters
-    ----------
-    response : str
-        Raw model response
-
-    Returns
-    -------
-    list of dict
-        Parsed medicine objects
-
-    Raises
-    ------
-    ExtractionError
-        If JSON cannot be parsed
-    """
-    # FIX (qwen migration): strip reasoning scaffolding FIRST. Previously
-    # this function only stripped a markdown fence at the very start of the
-    # string (`cleaned.startswith('```')`), which was safe for llama-4-scout
-    # but breaks the moment a reasoning model (qwen/qwen3.6-27b) puts
-    # <think> tags or free-form prose before the JSON -- exactly the cause
-    # of the "Expecting value: line 1 column 1 (char 0)" errors seen with
-    # the new fallback model.
     cleaned = _strip_reasoning_wrapper(response.strip())
 
-    # Legacy markdown-fence stripping, kept as a second pass in case
-    # _strip_reasoning_wrapper's fence search didn't already extract it
-    # (e.g. malformed/unclosed fence).
     if cleaned.startswith('```'):
         lines = cleaned.split('\n')
         if lines[0].strip() in ['```json', '```']:
@@ -1059,22 +703,6 @@ def parse_json_response(response: str) -> List[Dict[str, Any]]:
     except json.JSONDecodeError as e:
         logger.error(f"JSON parse error: {e}")
         logger.debug(f"Raw response: {response[:500]}")
-
-        # FIX (recall): previously any parse failure -- including a
-        # response that was 95% valid JSON but got cut off after the 4th
-        # of 5 medicine objects -- raised here and the caller lost EVERY
-        # medicine on the image, not just the unfinished one. Before giving
-        # up entirely, try to salvage whichever complete
-        # {"medicine_name": ..., ...} objects are present by scanning for
-        # balanced-brace objects inside a top-level "medicines" array. Any
-        # trailing, incomplete object is dropped (never guessed at), but
-        # everything the model actually finished writing is kept.
-        #
-        # Run recovery against BOTH the reasoning-stripped text and, if
-        # that finds nothing, the original raw response -- a reasoning
-        # model occasionally emits a stray '[' inside its own thinking
-        # prose that isn't actually the payload, so falling back to the
-        # original text widens the search rather than narrowing it.
         recovered = _recover_partial_medicines(cleaned)
         if not recovered:
             recovered = _recover_partial_medicines(response.strip())
@@ -1090,28 +718,6 @@ def parse_json_response(response: str) -> List[Dict[str, Any]]:
 
 
 def _recover_partial_medicines(text: str) -> List[Dict[str, Any]]:
-    """
-    Best-effort recovery of complete medicine objects from malformed or
-    truncated JSON text.
-
-    Scans for a `"medicines": [ ... ]` (or top-level `[ ... ]`) array and
-    extracts each balanced-brace `{...}` object it can find, in order,
-    stopping cleanly at the last object that is actually well-formed. Any
-    dangling/incomplete trailing object (the one that got cut off) is
-    discarded rather than guessed at, preserving the "never invent data"
-    contract while still saving whatever the model finished writing.
-
-    Parameters
-    ----------
-    text : str
-        Raw (already markdown-stripped) response text that failed
-        json.loads()
-
-    Returns
-    -------
-    list of dict
-        Zero or more successfully recovered medicine objects
-    """
     start = text.find('[')
     if start == -1:
         return []
@@ -1147,8 +753,6 @@ def _recover_partial_medicines(text: str) -> List[Dict[str, Any]]:
                 try:
                     recovered.append(json.loads(candidate))
                 except json.JSONDecodeError:
-                    # Malformed object even in isolation -- skip it rather
-                    # than propagate a parse error for the whole batch.
                     pass
                 obj_start = None
 
@@ -1162,24 +766,7 @@ def _recover_partial_medicines(text: str) -> List[Dict[str, Any]]:
 async def extract_prescription(
     image_path: Union[str, Path]
 ) -> Tuple[List[Dict[str, Any]], Dict[str, float]]:
-    """
-    High-level function to extract prescription data.
 
-    Parameters
-    ----------
-    image_path : str or Path
-        Path to prescription image
-
-    Returns
-    -------
-    tuple of (list, dict)
-        List of medicine dicts and timing information
-
-    Examples
-    --------
-     medicines, timings = await extract_prescription("rx_01.jpg")
-     print(f"Extracted {len(medicines)} medicines in {timings['total']:.2f}s")
-    """
     extractor = GeminiVisionExtractor()
     json_response, timings = await extractor.extract(image_path)
     medicines = parse_json_response(json_response)
@@ -1190,21 +777,7 @@ async def extract_with_fallback(
     image_path: Union[str, Path],
     trigger_fallback: bool = False
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-    """
-    Extract with optional fallback to Groq.
 
-    Parameters
-    ----------
-    image_path : str or Path
-        Path to prescription image
-    trigger_fallback : bool, optional
-        Whether to use fallback model, by default False
-
-    Returns
-    -------
-    tuple of (list, dict)
-        Medicine list and metadata dict
-    """
     metadata = {'used_fallback': False, 'timings': {}}
 
     # Primary extraction (Gemini, two-pass)

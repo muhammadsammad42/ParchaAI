@@ -1,6 +1,4 @@
 """
-Phase 3 Module Integration Test
-
 Tests all Phase 3 components:
 - preprocessing.py
 - extraction.py
@@ -19,7 +17,7 @@ def test_imports():
     print("Testing Phase 3 imports...")
     
     try:
-        from parcha_ai import (
+        from parcha_ai_backend import (
             ParchaAIPipeline,
             quick_process,
             run_full_evaluation,
@@ -28,24 +26,24 @@ def test_imports():
             MedicineDetail,
             normalize_text
         )
-        from parcha_ai.preprocessing import (
+        from parcha_ai_backend.preprocessing import (
             load_image,
             encode_image_to_base64,
             create_data_url,
             quick_encode
         )
-        from parcha_ai.extraction import (
+        from parcha_ai_backend.extraction import (
             VisionExtractor,
             QwenFallbackExtractor,
             parse_json_response
         )
-        from parcha_ai.confidence import (
+        from parcha_ai_backend.confidence import (
             ConfidenceScorer,
             FallbackRouter,
             calculate_confidence
         )
-        from parcha_ai.pipeline import ParchaAIPipeline
-        from parcha_ai.evaluation import PrescriptionEvaluator
+        from parcha_ai_backend.pipeline import ParchaAIPipeline
+        from parcha_ai_backend.evaluation import PrescriptionEvaluator
         
         print("All Phase 3 imports successful!")
         return True
@@ -60,8 +58,8 @@ def test_preprocessing():
     print("\nTesting preprocessing module...")
     
     try:
-        from parcha_ai.preprocessing import is_valid_image_file
-        from parcha_ai.config import get_config
+        from parcha_ai_backend.preprocessing import is_valid_image_file
+        from parcha_ai_backend.config import get_config
         
         config = get_config()
         images_dir = config.datasets_dir / 'raw_images'
@@ -96,8 +94,8 @@ def test_extraction_setup():
     print("\nTesting extraction module...")
     
     try:
-        from parcha_ai.extraction import VisionExtractor, QwenFallbackExtractor
-        from parcha_ai.config import get_config
+        from parcha_ai_backend.extraction import VisionExtractor, QwenFallbackExtractor
+        from parcha_ai_backend.config import get_config
         
         config = get_config()
         
@@ -125,8 +123,8 @@ def test_confidence():
     print("\nTesting confidence module...")
     
     try:
-        from parcha_ai.confidence import ConfidenceScorer
-        from parcha_ai.validation import MedicineDetail
+        from parcha_ai_backend.confidence import ConfidenceScorer
+        from parcha_ai_backend.validation import MedicineDetail
         
         scorer = ConfidenceScorer(threshold=0.85)
         
@@ -167,7 +165,7 @@ def test_pipeline_init():
     print("\nTesting pipeline module...")
     
     try:
-        from parcha_ai.pipeline import ParchaAIPipeline
+        from parcha_ai_backend.pipeline import ParchaAIPipeline
         
         pipeline = ParchaAIPipeline()
         
@@ -188,8 +186,8 @@ def test_evaluation_setup():
     print("\nTesting evaluation module...")
     
     try:
-        from parcha_ai.evaluation import PrescriptionEvaluator
-        from parcha_ai.config import get_config
+        from parcha_ai_backend.evaluation import PrescriptionEvaluator
+        from parcha_ai_backend.config import get_config
         
         config = get_config()
         evaluator = PrescriptionEvaluator()
@@ -221,9 +219,7 @@ def test_main_cli():
     print("\nTesting main CLI module...")
     
     try:
-        from parcha_ai import main
-        
-        # Just check that main function exists
+        from parcha_ai_backend import main
         if hasattr(main, 'main'):
             print("CLI main() function exists")
             return True
@@ -241,13 +237,12 @@ async def test_extraction_parsing():
     print("\nTesting JSON parsing...")
     
     try:
-        from parcha_ai.extraction import parse_json_response
+        from parcha_ai_backend.extraction import parse_json_response
         
         # Test with clean JSON
         clean_json = '[{"medicine_name": "Test", "dosage": "500mg"}]'
         result1 = parse_json_response(clean_json)
         
-        # Test with markdown fences
         markdown_json = '''```json
 [{"medicine_name": "Test", "dosage": "500mg"}]
 ```'''

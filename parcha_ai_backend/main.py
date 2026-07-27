@@ -192,18 +192,6 @@ async def run_evaluation(
     limit: Optional[int] = None,
     verbose: bool = False
 ):
-    """
-    Run full evaluation against ground truth dataset.
-    
-    Parameters
-    ----------
-    skip_fallback : bool, optional
-        Skip fallback verification, by default False
-    limit : int, optional
-        Limit number of images to evaluate, by default None
-    verbose : bool, optional
-        Enable verbose logging, by default False
-    """
     setup_cli_logging(verbose)
     
     logger.info("Starting evaluation suite")

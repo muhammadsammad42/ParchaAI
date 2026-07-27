@@ -1,23 +1,3 @@
-"""
-Offline utility script for cleaning the drug reference database.
-
-This script performs the following operations:
-1. Removes 'Image URL' and all review-related columns
-2. Replaces missing values with "unread"
-3. Removes duplicate medicine rows based on name
-4. Cleans 'Uses' and 'Side_effects' of unnecessary whitespace/newlines
-5. Formats them as clean comma-separated strings
-6. Saves the cleaned dataset as 'drug_reference_db.csv'
-
-Usage
------
-Run this script once before using the extraction pipeline:
-    python datasets/clean_dataset.py
-
-Or import and use programmatically:
-    from datasets.clean_dataset import clean_drug_reference_db
-    clean_drug_reference_db()
-"""
 
 import sys
 from pathlib import Path
@@ -61,27 +41,7 @@ def clean_drug_reference_db(
     output_path: Path = None,
     verbose: bool = True
 ) -> pd.DataFrame:
-    """Clean the drug reference database and save to disk.
     
-    Parameters
-    ----------
-    input_path : Path, optional
-        Path to the raw drug database CSV. If None, uses default path.
-    output_path : Path, optional
-        Path to save cleaned CSV. If None, uses default path.
-    verbose : bool, optional
-        Whether to print progress information, by default True
-    
-    Returns
-    -------
-    pd.DataFrame
-        The cleaned dataframe
-    
-    Raises
-    ------
-    FileNotFoundError
-        If input file does not exist
-    """
     # Set default paths
     if input_path is None:
         # Assume we're in datasets/ directory
@@ -157,11 +117,11 @@ def clean_drug_reference_db(
         duplicates_removed = original_count - len(df)
         
         if verbose:
-            print(f"  ✓ Removed {duplicates_removed} duplicate rows")
-            print(f"  ✓ Unique medicines remaining: {len(df)}")
+            print(f"Removed {duplicates_removed} duplicate rows")
+            print(f"Unique medicines remaining: {len(df)}")
     else:
         if verbose:
-            print("  ⚠ Warning: 'Medicine Name' column not found, skipping deduplication")
+            print("Warning: 'Medicine Name' column not found, skipping deduplication")
     
     # Step 4: Clean 'Uses' and 'Side_effects' fields
     if verbose:
@@ -171,10 +131,10 @@ def clean_drug_reference_db(
         if field in df.columns:
             df[field] = df[field].apply(clean_text_field)
             if verbose:
-                print(f"  ✓ Cleaned '{field}' column")
+                print(f"Cleaned '{field}' column")
         else:
             if verbose:
-                print(f"  ⚠ Warning: '{field}' column not found")
+                print(f"Warning: '{field}' column not found")
     
     # Step 5: Clean other text columns
     if verbose:
@@ -186,7 +146,7 @@ def clean_drug_reference_db(
             df[col] = df[col].apply(clean_text_field)
     
     if verbose:
-        print(f"  ✓ Cleaned all text columns")
+        print(f"Cleaned all text columns")
     
     # Save the cleaned dataset
     if verbose:
@@ -196,7 +156,7 @@ def clean_drug_reference_db(
     df.to_csv(output_path, index=False, encoding='utf-8')
     
     if verbose:
-        print(f"  ✓ Saved successfully!")
+        print(f"Saved successfully!")
         print()
         print("=" * 70)
         print("Summary:")
@@ -208,7 +168,7 @@ def clean_drug_reference_db(
         print(f"  Column names:       {', '.join(df.columns)}")
         print("=" * 70)
         print()
-        print("✓ Drug reference database cleaned successfully!")
+        print("Drug reference database cleaned successfully!")
         print()
     
     return df
@@ -269,7 +229,7 @@ def verify_cleaned_database(db_path: Path = None, sample_size: int = 5) -> None:
     print(df.head(sample_size).to_string())
     print("=" * 70)
     print()
-    print("✓ Verification complete!")
+    print("Verification complete!")
 
 
 if __name__ == "__main__":
@@ -310,7 +270,6 @@ if __name__ == "__main__":
             verbose=not args.quiet
         )
         
-        # Verify if requested
         if args.verify:
             verify_cleaned_database(db_path=args.output)
         

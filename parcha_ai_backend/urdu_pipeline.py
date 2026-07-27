@@ -7,18 +7,18 @@ Chains together everything built so far:
     Prescription Image
         |
         v
-    ParchaAIPipeline (Week 1/2: extraction, validation, RapidFuzz,
+    ParchaAIPipeline (extraction, validation, RapidFuzz,
                        local DB, OpenFDA, confidence, Qwen fallback)
         |
         v
     PrescriptionResponse (validated MedicineDetail list)
         |
         v
-    UrduExplainer (Week 3: Groq Llama-3.3-70B text -> Urdu paragraph
+    UrduExplainer (Groq Llama-3.3-70B text -> Urdu paragraph
                     per medicine)
         |
         v
-    TextToSpeechEngine (Week 3: gTTS -> .mp3 per medicine,
+    TextToSpeechEngine (gTTS -> .mp3 per medicine,
                          + one combined .mp3 per prescription)
         |
         v
@@ -26,13 +26,6 @@ Chains together everything built so far:
 
 Drop this file into the `parcha_ai` package next to pipeline.py.
 
-Usage
------
-    >>> from parcha_ai.urdu_pipeline import UrduPipeline
-    >>> import asyncio
-    >>> pipeline = UrduPipeline()
-    >>> result = asyncio.run(pipeline.process_image("data/raw_images/rx_01.jpg"))
-    >>> print(result.combined_audio_path)
 """
 
 import asyncio
@@ -94,21 +87,6 @@ class UrduPrescriptionResult:
 
 
 class UrduPipeline:
-    """
-    Orchestrates Week 3: extraction (via ParchaAIPipeline) -> Urdu
-    explanation -> TTS audio.
-
-    Parameters
-    ----------
-    extraction_pipeline : ParchaAIPipeline, optional
-        Reuses an existing Week 1/2 pipeline instance if provided,
-        otherwise creates a new one.
-    explainer : UrduExplainer, optional
-    tts_engine : TextToSpeechEngine, optional
-    combine_audio : bool, optional
-        Whether to also produce one combined .mp3 per prescription
-        (in addition to per-medicine files), by default True.
-    """
 
     def __init__(
         self,
@@ -227,11 +205,6 @@ class UrduPipeline:
         image_paths: List[Union[str, Path]],
         skip_fallback: bool = False,
     ) -> List[UrduPrescriptionResult]:
-        """
-        Process multiple images sequentially through the full chain.
-        Sequential (not gather) to stay within Groq free-tier limits,
-        matching the pattern used elsewhere in the pipeline.
-        """
         results = []
         for path in image_paths:
             try:

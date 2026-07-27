@@ -1,11 +1,7 @@
 
-/// Data models mirroring the JSON returned by:
-///   GET /result/{prescription_id}
-/// on the ParchaAI FastAPI backend (see api.py / urdu_pipeline.py).
-
 /// Complete medicine detail with all 11 fields from MedicineDetail schema
 class MedicineDetail {
-  // Extracted fields (from prescription image)
+  
   final String medicineName;
   final String dosage;
   final String frequency;

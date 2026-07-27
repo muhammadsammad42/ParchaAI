@@ -7,8 +7,6 @@ import 'package:http/http.dart' as http;
 
 import 'models.dart';
 
-/// Thrown for any non-2xx response so the UI can show a real error instead
-/// of silently failing.
 class ApiException implements Exception {
   final int statusCode;
   final String message;
@@ -17,7 +15,6 @@ class ApiException implements Exception {
   @override
   String toString() => 'ApiException($statusCode): $message';
   
-  /// Get user-friendly error message
   String get userMessage {
     if (statusCode == 409) {
       return 'Prescription is still being processed. Please wait a moment.';
@@ -40,34 +37,9 @@ class ApiException implements Exception {
 }
 
 class ApiService {
-  /// ---------------------------------------------------------------------
-  /// IMPORTANT: set this to match how you're running the backend.
-  ///
-  ///   - Android EMULATOR  -> "http://10.0.2.2:8000"
-  ///     (10.0.2.2 is the emulator's alias for your host machine's
-  ///     localhost -- "localhost" from inside the emulator means the
-  ///     emulator itself, not your PC.)
-  ///
-  ///   - iOS SIMULATOR     -> "http://127.0.0.1:8000" (or "localhost")
-  ///     (the iOS simulator DOES share your Mac's localhost)
-  ///
-  ///   - Physical PHONE on the SAME Wi-Fi as your PC
-  ///                       -> "http://<your-pc-LAN-IP>:8000"
-  ///     Find your LAN IP with `ipconfig` (Windows, look for IPv4 Address)
-  ///     or `ifconfig` (Mac/Linux, look for inet under your Wi-Fi adapter)
-  ///     e.g. "http://192.168.1.42:8000". Your uvicorn command already
-  ///     binds --host 0.0.0.0 so it accepts this.
-  ///
-  ///   - Physical phone on a DIFFERENT network than your PC
-  ///                       -> use an Ngrok tunnel to your local :8000
-  ///     and paste the https://xxxx.ngrok-free.app URL here instead.
-  /// ---------------------------------------------------------------------
-  /// 
-  /// TODO: Update this to your laptop's LAN IP when testing on physical device!
-  /// Example: "http://192.168.1.42:8000"
-  static const String baseUrl = "http://YOUR_LOCAL_IP:8000";
+
+  static const String baseUrl = "http://192.168.100.8:8000";
   
-  /// Timeout for API requests
   static const Duration requestTimeout = Duration(seconds: 30);
 
   /// Checks if the backend server is healthy and reachable
@@ -121,7 +93,6 @@ class ApiService {
     }
   }
 
-  /// Polls the current lifecycle status: pending | processing | done | failed
   Future<PrescriptionStatus> getStatus(String prescriptionId) async {
     try {
       final uri = Uri.parse('$baseUrl/status/$prescriptionId');
@@ -143,9 +114,6 @@ class ApiService {
     }
   }
 
-  /// Fetches the full result once status is "done".
-  /// Throws ApiException(409, ...) if called before it's ready --
-  /// callers should only invoke this after getStatus() returns `done`.
   Future<PrescriptionResult> getResult(String prescriptionId) async {
     try {
       final uri = Uri.parse('$baseUrl/result/$prescriptionId');
@@ -175,10 +143,6 @@ class ApiService {
     }
   }
 
-  /// Polls /status every [interval] until done/failed, then returns the
-  /// result (or throws if it failed). Simple loop -- fine for an MVP;
-  /// swap for a StreamBuilder-driven approach later if you want live
-  /// progress updates instead of a single blocking future.
   Future<PrescriptionResult> uploadAndWaitForResult(
     File imageFile, {
     Duration interval = const Duration(seconds: 2),
@@ -196,7 +160,6 @@ class ApiService {
         return getResult(id);
       }
       if (status == PrescriptionStatus.failed) {
-        // Try to get more details about the failure
         try {
           await getResult(id);
         } catch (e) {
@@ -231,7 +194,6 @@ class ApiService {
         return decoded['detail'].toString();
       }
     } catch (_) {
-      // response wasn't JSON; fall through
     }
     return responseBody;
   }
