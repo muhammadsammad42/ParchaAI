@@ -1,21 +1,8 @@
 
-"""
-Generates a bar chart visualizing ParchaAI's evaluation metrics.
-
-Reads outputs/summary.json (produced by `python -m parcha_ai_backend.main evaluate`)
-and saves a PNG chart. Standalone reporting script -- not part of the app itself.
-
-Usage
------
-    python scripts/plot_metrics.py
-    python scripts/plot_metrics.py --input outputs/summary.json --output outputs/metrics_chart.png
-"""
-
 import argparse
 import json
-from pathlib import Path
-
 import matplotlib.pyplot as plt
+from pathlib import Path
 
 
 def load_summary(path: Path) -> dict:
@@ -40,9 +27,7 @@ def plot_metrics(summary: dict, output_path: Path) -> None:
         "F1 score": summary["f1_score"],
         "Exact match\naccuracy": summary["exact_match_accuracy"],
     }
-    # Hallucination rate is the opposite direction (lower = better) --
-    # plotted separately in red so it isn't visually confused with the
-    # "higher is better" bars above.
+
     hallucination_rate = summary["hallucination_rate"]
 
     labels = list(good_metrics.keys()) + ["Hallucination\nrate"]
@@ -77,9 +62,6 @@ def plot_metrics(summary: dict, output_path: Path) -> None:
     ax.set_axisbelow(True)
     plt.xticks(fontsize=9)
 
-    # Footnote with the safety-net numbers -- these matter as much as raw
-    # accuracy for a medical tool, but don't fit naturally as bars on the
-    # same 0-100% axis as field accuracy (they're calibration figures).
     footnote = (
         f"Human review catch rate: {summary.get('human_review_catch_rate', 'N/A')}%   |   "
         f"False reassurance rate: {summary.get('false_reassurance_rate', 'N/A')}%   |   "
