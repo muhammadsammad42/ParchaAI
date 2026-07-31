@@ -132,24 +132,7 @@ def create_data_url(
     image_input: Union[str, Path, np.ndarray],
     validate: bool = True
 ) -> str:
-    """
-    Create a data URL for an image (base64 with MIME type prefix).
-    
-    This format is required by many vision APIs including Groq.
-    Format: "data:image/{mime_type};base64,{base64_string}"
-    
-    Parameters
-    ----------
-    image_path : str or Path
-        Path to the image file
-    validate : bool, optional
-        Whether to validate image before encoding, by default True
-    
-    Returns
-    -------
-    str
-        Complete data URL ready for API transmission
-    """
+
     if isinstance(image_input, np.ndarray):
         mime_type = 'png'
         filename = 'processed_image'
@@ -234,25 +217,7 @@ def preprocess_for_ocr(
     resize_width: Optional[int] = None,
     enhance_contrast: bool = False
 ) -> np.ndarray:
-    """
-    Optional preprocessing to improve OCR quality.
-    
-    Note: This is NOT required for VLM APIs but can help with very poor quality images.
-    
-    Parameters
-    ----------
-    image : np.ndarray
-        Input image
-    resize_width : int, optional
-        Target width for resizing (maintains aspect ratio)
-    enhance_contrast : bool, optional
-        Whether to apply contrast enhancement, by default False
-    
-    Returns
-    -------
-    np.ndarray
-        Preprocessed image
-    """
+
     processed = image.copy()
     
     # Resize if requested
@@ -306,20 +271,7 @@ def upscale_for_vlm(image_path: Union[str, Path], min_long_edge: int = 1200) -> 
 
 
 def batch_load_images(image_paths: list[Union[str, Path]]) -> dict[str, np.ndarray]:
-    """
-    Load multiple images in batch.
-    
-    Parameters
-    ----------
-    image_paths : list of str or Path
-        List of image file paths
-    
-    Returns
-    -------
-    dict
-        Mapping of filename -> image array
-        Failed loads are logged but not included in output
-    """
+
     images = {}
     
     for path in image_paths:
@@ -335,21 +287,7 @@ def batch_load_images(image_paths: list[Union[str, Path]]) -> dict[str, np.ndarr
 
 
 def save_image(image: np.ndarray, output_path: Union[str, Path]) -> None:
-    """
-    Save an image to disk.
-    
-    Parameters
-    ----------
-    image : np.ndarray
-        Image to save
-    output_path : str or Path
-        Output file path
-    
-    Raises
-    ------
-    ImageProcessingError
-        If image cannot be saved
-    """
+
     output_path = Path(output_path)
     
     # Create parent directory if needed
@@ -369,40 +307,12 @@ def save_image(image: np.ndarray, output_path: Union[str, Path]) -> None:
 # =============================================================================
 
 def quick_encode(image_path: Union[str, Path]) -> str:
-    """
-    Quick encoding to data URL (most common use case).
-    
-    Parameters
-    ----------
-    image_path : str or Path
-        Path to image
-    
-    Returns
-    -------
-    str
-        Data URL ready for API
-    
-    Examples
-    --------
-     data_url = quick_encode("prescription.jpg")
-    """
+
     return create_data_url(image_path, validate=True)
 
 
 def is_valid_image_file(file_path: Union[str, Path]) -> bool:
-    """
-    Check if a file is a valid image without fully loading it.
-    
-    Parameters
-    ----------
-    file_path : str or Path
-        Path to check
-    
-    Returns
-    -------
-    bool
-        True if file is a valid image
-    """
+
     try:
         file_path = Path(file_path)
         
@@ -414,7 +324,7 @@ def is_valid_image_file(file_path: Union[str, Path]) -> bool:
         if file_path.suffix.lower() not in valid_extensions:
             return False
         
-        # Try to load with PIL (lighter than OpenCV)
+        # Try to load with PIL 
         with Image.open(file_path) as img:
             img.verify()
         

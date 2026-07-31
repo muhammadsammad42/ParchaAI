@@ -1,0 +1,74 @@
+# ============================================================================
+# Docker Build Exclusions for ParchaAI
+# ============================================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Environment files (secrets should be injected via Fly.io secrets)
+.env
+.env.local
+.env.*.local
+
+# Local development data (NOT needed in Docker image)
+data/labels/
+data/raw_images/
+data/raw_drug_database.csv
+data/parcha_ai.db
+
+# Runtime artifacts (regenerated on Fly.io volume)
+cache/
+logs/
+outputs/
+
+# Test and evaluation files
+tests/
+test_*.py
+*_test.py
+evaluation/
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Notebooks and scripts
+notebooks/
+scripts/
+*.ipynb
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Fly.io
+fly.toml
+
+# Flutter app (if present in repo)
+parcha_ai_app/
+
+# Agent and misc
+.agents/
+.kiro/

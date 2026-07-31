@@ -25,6 +25,7 @@ from .extraction import (
     parse_json_response,
 )
 from .fuzzy_match import MedicineMatcher
+from .medical_text_summarizer import summarize_uses_precautions
 from .openfda import OpenFDAClient
 from .preprocessing import get_image_info, is_valid_image_file
 from .utils import normalize_field, normalize_text
@@ -39,30 +40,7 @@ class PipelineError(Exception):
 
 
 class ParchaAIPipeline:
-    """
-    Complete prescription extraction and validation pipeline.
-    
-    This class coordinates all components:
-    - Image loading and validation
-    - Vision model extraction
-    - Database matching and enrichment
-    - Confidence evaluation
-    - Fallback routing
-    - Final response generation
-    
-    Attributes
-    ----------
-    extractor : GeminiVisionExtractor
-        Primary vision model extractor
-    fallback_extractor : GroqFallbackExtractor
-        Fallback vision model
-    matcher : MedicineMatcher
-        Local database matcher
-    fda_client : OpenFDAClient
-        OpenFDA API client
-    router : FallbackRouter
-        Confidence-based routing logic
-    """
+
     
     def __init__(
         self,
@@ -101,26 +79,7 @@ class ParchaAIPipeline:
         image_path: Union[str, Path],
         skip_fallback: bool = False
     ) -> PrescriptionResponse:
-        """
-        Process a prescription image end-to-end.
-        
-        Parameters
-        ----------
-        image_path : str or Path
-            Path to prescription image
-        skip_fallback : bool, optional
-            Skip fallback verification even if confidence is low, by default False
-        
-        Returns
-        -------
-        PrescriptionResponse
-            Complete validated prescription data
-        
-        Raises
-        ------
-        PipelineError
-            If processing fails at any stage
-        """
+
         image_path = Path(image_path)
         start_time = time.time()
         
@@ -174,9 +133,7 @@ class ParchaAIPipeline:
             # Finalize without fallback
             medicines = self.router.finalize_medicines(medicines, fuzzy_scores)
         
-        # ----- NEW: Filter out likely hallucinations -----
         medicines = self._filter_medicines(medicines)
-        # -------------------------------------------------
         
         # Step 6: Generate response
         logger.info("Step 6: Generating final response")
@@ -189,6 +146,10 @@ class ParchaAIPipeline:
             extraction_time_seconds=round(total_time, 3),
             fallback_model_used=used_fallback
         )
+        
+        # Step 7: Post-process — generate Urdu summaries for side_effects/precautions
+        logger.info("Step 7: Generating Urdu summaries for side_effects/precautions")
+        self._populate_urdu_summaries(response.extracted_medicines)
         
         logger.info(f"{'='*60}")
         logger.info(f"Pipeline complete in {total_time:.2f}s")
@@ -204,19 +165,7 @@ class ParchaAIPipeline:
         self,
         raw_medicines: List[Dict]
     ) -> Tuple[List[MedicineDetail], Dict[str, float]]:
-        """
-        Validate and enrich medicines with database data.
-        
-        Parameters
-        ----------
-        raw_medicines : list of dict
-            Raw extracted medicine data
-        
-        Returns
-        -------
-        tuple of (list, dict)
-            Validated MedicineDetail objects and fuzzy match scores
-        """
+
         validated_medicines = []
         fuzzy_scores = {}
 
@@ -345,25 +294,7 @@ class ParchaAIPipeline:
         medicine_count: int,
         fuzzy_scores: Dict[str, float]
     ) -> Tuple[List[MedicineDetail], bool]:
-        """
-        Execute fallback verification with Groq.
-        
-        Parameters
-        ----------
-        image_path : Path
-            Prescription image path
-        primary_medicines : list of MedicineDetail
-            Primary extraction results
-        medicine_count : int
-            Expected medicine count
-        fuzzy_scores : dict
-            Primary fuzzy scores
-        
-        Returns
-        -------
-        tuple of (list, bool)
-            Final medicines and whether fallback was used
-        """
+
         previous_medicines = [
             {
                 key: med.model_dump().get(key, 'unread')
@@ -419,10 +350,7 @@ class ParchaAIPipeline:
             if med.found_in_local_db or med.found_in_openfda:
                 filtered.append(med)
                 continue
-            # No DB corroboration: keep unless the MODEL ITSELF was unsure.
-            # (0.4 chosen to match the extraction prompt's own "Low
-            # (0.0-0.5): Difficult handwriting" band -- below that the model
-            # is telling us it likely couldn't read this reliably.)
+
             if med.extraction_confidence >= 0.4:
                 filtered.append(med)
             else:
@@ -433,26 +361,46 @@ class ParchaAIPipeline:
                 )
         return filtered
     
+    def _populate_urdu_summaries(self, medicines: List[MedicineDetail]) -> None:
+
+        if not medicines:
+            return
+        
+        summary_count = 0
+        
+        for med in medicines:
+            # Process 'side_effects' independently
+            if med.side_effects and med.side_effects != "unread" and med.side_effects.strip():
+                logger.debug(f"Summarizing side_effects for {med.medicine_name}")
+                summary = summarize_uses_precautions(
+                    medicine_name=med.medicine_name,
+                    text=med.side_effects,
+                    field_type="side_effects"
+                )
+                if summary:
+                    med.side_effects_urdu_short = summary
+                    summary_count += 1
+            
+            # Process 'precautions' independently
+            if med.precautions and med.precautions != "unread" and med.precautions.strip():
+                logger.debug(f"Summarizing precautions for {med.medicine_name}")
+                summary = summarize_uses_precautions(
+                    medicine_name=med.medicine_name,
+                    text=med.precautions,
+                    field_type="precautions"
+                )
+                if summary:
+                    med.precautions_urdu_short = summary
+                    summary_count += 1
+        
+        logger.info(f"Generated {summary_count} Urdu summaries across {len(medicines)} medicine(s)")
+    
     async def process_batch(
         self,
         image_paths: List[Union[str, Path]],
         skip_fallback: bool = False
     ) -> List[PrescriptionResponse]:
-        """
-        Process multiple prescriptions in batch.
-        
-        Parameters
-        ----------
-        image_paths : list of str or Path
-            List of prescription image paths
-        skip_fallback : bool, optional
-            Skip fallback for all images, by default False
-        
-        Returns
-        -------
-        list of PrescriptionResponse
-            Results for all images
-        """
+
         logger.info(f"Starting batch processing: {len(image_paths)} image(s)")
         
         results = []
@@ -469,19 +417,7 @@ class ParchaAIPipeline:
         return results
     
     def get_statistics(self, response: PrescriptionResponse) -> Dict:
-        """
-        Get summary statistics for a prescription response.
-        
-        Parameters
-        ----------
-        response : PrescriptionResponse
-            Prescription response
-        
-        Returns
-        -------
-        dict
-            Statistics summary
-        """
+
         medicines = response.extracted_medicines
         
         stats = {
@@ -512,35 +448,11 @@ class ParchaAIPipeline:
 async def quick_process(
     image_path: Union[str, Path]
 ) -> PrescriptionResponse:
-    """
-    Quick single-image processing.
-    
-    Parameters
-    ----------
-    image_path : str or Path
-        Prescription image path
-    
-    Returns
-    -------
-    PrescriptionResponse
-        Complete prescription data
-    """
+
     pipeline = ParchaAIPipeline()
     return await pipeline.process_image(image_path)
 
 
 async def process_prescription_sync_wrapper(image_path: Union[str, Path]) -> PrescriptionResponse:
-    """
-    Wrapper for running pipeline in synchronous code.
-    
-    Parameters
-    ----------
-    image_path : str or Path
-        Prescription image path
-    
-    Returns
-    -------
-    PrescriptionResponse
-        Complete prescription data
-    """
+
     return await quick_process(image_path)

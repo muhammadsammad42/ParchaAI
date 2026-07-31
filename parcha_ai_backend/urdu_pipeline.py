@@ -54,24 +54,23 @@ class UrduPipelineError(Exception):
 class MedicineAudioResult:
     """Urdu text + audio outcome for a single medicine."""
     medicine_name: str
-    urdu_text: str
+    urdu_text: str  # Keep for backward compatibility
     audio_path: Optional[str]  # str, not Path, so this dataclass is JSON-friendly
     audio_generated: bool
+    display_text: str = ""  # Medicine name as English (Urdu) for UI display
+    speech_text: str = ""   # Full Urdu text for TTS (without English)
 
 
 @dataclass
 class UrduPrescriptionResult:
-    """
-    Full Week 3 output for one prescription: the underlying validated
-    extraction plus Urdu text and audio for every medicine.
-    """
+
     prescription_id: str
     medicines: List[MedicineAudioResult] = field(default_factory=list)
     combined_audio_path: Optional[str] = None
     urdu_generation_time_seconds: float = 0.0
     audio_generation_time_seconds: float = 0.0
     total_time_seconds: float = 0.0
-    extraction_response: Optional[dict] = None  # raw PrescriptionResponse.model_dump()
+    extraction_response: Optional[dict] = None  
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -103,19 +102,7 @@ class UrduPipeline:
     async def process_prescription(
         self, response: PrescriptionResponse
     ) -> UrduPrescriptionResult:
-        """
-        Run the Urdu explanation + audio stage on an already-extracted
-        PrescriptionResponse (skips image processing entirely).
 
-        Parameters
-        ----------
-        response : PrescriptionResponse
-            Output of ParchaAIPipeline.process_image / Week 1/2 pipeline.
-
-        Returns
-        -------
-        UrduPrescriptionResult
-        """
         overall_start = time.time()
 
         if not response.extracted_medicines:
@@ -139,18 +126,32 @@ class UrduPipeline:
             f"{response.prescription_id}_{i:02d}_{med.medicine_name}"
             for i, med in enumerate(response.extracted_medicines)
         ]
+        
         audio_paths = self.tts_engine.synthesize_batch(urdu_texts, stems)
         audio_elapsed = time.time() - audio_start
 
-        medicine_results = [
-            MedicineAudioResult(
-                medicine_name=med.medicine_name,
-                urdu_text=text,
-                audio_path=str(path) if path else None,
-                audio_generated=path is not None,
+        from .pronunciation import resolve_pronunciation
+        
+        medicine_results = []
+        for med, text, path in zip(response.extracted_medicines, urdu_texts, audio_paths):
+            # Get Urdu pronunciation for display
+            urdu_name = resolve_pronunciation(med.medicine_name)
+            
+            # speech_text = pure Urdu (goes to TTS)
+            speech_text = text
+            
+            display_text = text.replace(urdu_name, f"{med.medicine_name} ({urdu_name})", 1)
+            
+            medicine_results.append(
+                MedicineAudioResult(
+                    medicine_name=med.medicine_name,
+                    urdu_text=text,  # Keep for backward compatibility
+                    audio_path=str(path) if path else None,
+                    audio_generated=path is not None,
+                    display_text=display_text,
+                    speech_text=speech_text,
+                )
             )
-            for med, text, path in zip(response.extracted_medicines, urdu_texts, audio_paths)
-        ]
 
         combined_path = None
         if self.combine_audio:
@@ -182,19 +183,7 @@ class UrduPipeline:
         image_path: Union[str, Path],
         skip_fallback: bool = False,
     ) -> UrduPrescriptionResult:
-        """
-        Full chain: image -> extraction (Week 1/2) -> Urdu + audio (Week 3).
 
-        Parameters
-        ----------
-        image_path : str or Path
-        skip_fallback : bool, optional
-            Passed through to ParchaAIPipeline.process_image.
-
-        Returns
-        -------
-        UrduPrescriptionResult
-        """
         extraction_response = await self.extraction_pipeline.process_image(
             image_path, skip_fallback=skip_fallback
         )

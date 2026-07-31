@@ -76,7 +76,7 @@ def clean_drug_reference_db(
     df = pd.read_csv(input_path, encoding='utf-8-sig')
     original_count = len(df)
     if verbose:
-        print(f"  ✓ Loaded {original_count} rows, {len(df.columns)} columns")
+        print(f"Loaded {original_count} rows, {len(df.columns)} columns")
     
     # Step 1: Remove Image URL and review columns
     if verbose:
@@ -94,8 +94,8 @@ def clean_drug_reference_db(
     df = df.drop(columns=existing_columns_to_remove, errors='ignore')
     
     if verbose:
-        print(f"  ✓ Removed {len(existing_columns_to_remove)} columns: {existing_columns_to_remove}")
-        print(f"  ✓ Remaining columns: {list(df.columns)}")
+        print(f"Removed {len(existing_columns_to_remove)} columns: {existing_columns_to_remove}")
+        print(f"Remaining columns: {list(df.columns)}")
     
     # Step 2: Replace missing values with "unread"
     if verbose:
@@ -105,7 +105,7 @@ def clean_drug_reference_db(
     df = df.fillna("unread")
     
     if verbose:
-        print(f"  ✓ Replaced {missing_before} missing values")
+        print(f"Replaced {missing_before} missing values")
     
     # Step 3: Remove duplicate medicines based on name
     if verbose:

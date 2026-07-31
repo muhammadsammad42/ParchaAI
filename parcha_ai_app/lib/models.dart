@@ -8,12 +8,17 @@ class MedicineDetail {
   final String duration;
   final String purpose;
   
-  // Enriched fields (from database/API lookups)
+  // Enriched fields 
   final String composition;
   final String uses;
   final String sideEffects;
   final String precautions;
   final String manufacturer;
+  
+  // Urdu summaries
+  final String? usesUrduShort;
+  final String? sideEffectsUrduShort;
+  final String? precautionsUrduShort;
   
   // Computed field
   final double confidence;
@@ -36,6 +41,9 @@ class MedicineDetail {
     required this.sideEffects,
     required this.precautions,
     required this.manufacturer,
+    this.usesUrduShort,
+    this.sideEffectsUrduShort,
+    this.precautionsUrduShort,
     required this.confidence,
     required this.extractionConfidence,
     required this.foundInLocalDb,
@@ -56,6 +64,9 @@ class MedicineDetail {
       sideEffects: json['side_effects'] as String? ?? 'unread',
       precautions: json['precautions'] as String? ?? 'unread',
       manufacturer: json['manufacturer'] as String? ?? 'unread',
+      usesUrduShort: json['uses_urdu_short'] as String?,
+      sideEffectsUrduShort: json['side_effects_urdu_short'] as String?,
+      precautionsUrduShort: json['precautions_urdu_short'] as String?,
       confidence: (json['confidence'] as num?)?.toDouble() ?? 0.0,
       extractionConfidence: (json['extraction_confidence'] as num?)?.toDouble() ?? 0.5,
       foundInLocalDb: json['found_in_local_db'] as bool? ?? false,

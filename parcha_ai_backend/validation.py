@@ -66,7 +66,7 @@ class MedicineDetail(BaseModel):
     )
     
     # =========================================================================
-    # ENRICHED FIELDS (from database or API lookups)
+    # ENRICHED FIELDS 
     # =========================================================================
     
     composition: str = Field(
@@ -97,6 +97,25 @@ class MedicineDetail(BaseModel):
         default="unread",
         description="Manufacturing company name",
         examples=["GlaxoSmithKline", "Cipla", "Abbott"]
+    )
+    
+    # =========================================================================
+    # URDU SUMMARIES 
+    # =========================================================================
+    
+    uses_urdu_short: Optional[str] = Field(
+        default=None,
+        description="Simple 2-3 sentence Urdu summary of uses (for display only when present)"
+    )
+    
+    side_effects_urdu_short: Optional[str] = Field(
+        default=None,
+        description="Simple 2-3 sentence Urdu summary of side effects (for display only when present)"
+    )
+    
+    precautions_urdu_short: Optional[str] = Field(
+        default=None,
+        description="Simple 2-3 sentence Urdu summary of precautions (for display only when present)"
     )
     
     # =========================================================================
@@ -226,13 +245,7 @@ class MedicineDetail(BaseModel):
         return self.model_dump()
     
     def is_complete(self) -> bool:
-        """Check if all required fields are filled (not 'unread').
-        
-        Returns
-        -------
-        bool
-            True if all 11 fields contain actual data
-        """
+
         fields_to_check = [
             self.medicine_name,
             self.dosage,
@@ -249,13 +262,7 @@ class MedicineDetail(BaseModel):
         return all(field != "unread" for field in fields_to_check)
     
     def get_missing_fields(self) -> List[str]:
-        """Get list of field names that are 'unread'.
-        
-        Returns
-        -------
-        list[str]
-            Names of fields containing 'unread'
-        """
+
         missing = []
         
         field_map = {
@@ -383,76 +390,30 @@ class PrescriptionResponse(BaseModel):
         return v
     
     def to_dict(self) -> dict:
-        """Convert model to dictionary.
-        
-        Returns
-        -------
-        dict
-            Dictionary representation including all nested medicines
-        """
+
         return self.model_dump()
     
     def get_high_confidence_medicines(self, threshold: float = 0.85) -> List[MedicineDetail]:
-        """Get medicines with confidence above threshold.
-        
-        Parameters
-        ----------
-        threshold : float, optional
-            Confidence threshold, by default 0.85
-        
-        Returns
-        -------
-        list[MedicineDetail]
-            Medicines with confidence >= threshold
-        """
+
         return [m for m in self.extracted_medicines if m.confidence >= threshold]
     
     def get_low_confidence_medicines(self, threshold: float = 0.85) -> List[MedicineDetail]:
-        """Get medicines with confidence below threshold.
-        
-        Parameters
-        ----------
-        threshold : float, optional
-            Confidence threshold, by default 0.85
-        
-        Returns
-        -------
-        list[MedicineDetail]
-            Medicines with confidence < threshold
-        """
+
         return [m for m in self.extracted_medicines if m.confidence < threshold]
     
     def get_review_required_medicines(self) -> List[MedicineDetail]:
-        """Get medicines requiring human review.
-        
-        Returns
-        -------
-        list[MedicineDetail]
-            Medicines flagged for review
-        """
+
         return [m for m in self.extracted_medicines if m.requires_human_review]
     
     def get_unidentified_medicines(self) -> List[MedicineDetail]:
-        """Get medicines not found in any database.
-        
-        Returns
-        -------
-        list[MedicineDetail]
-            Medicines not found in local DB or OpenFDA
-        """
+
         return [
             m for m in self.extracted_medicines
             if not m.found_in_local_db and not m.found_in_openfda
         ]
     
     def summary(self) -> str:
-        """Generate a human-readable summary.
-        
-        Returns
-        -------
-        str
-            Summary text
-        """
+
         lines = [
             f"Prescription: {self.prescription_id}",
             f"Medicines Extracted: {self.total_medicines}",
@@ -504,26 +465,7 @@ def create_prescription_response(
     extraction_time: Optional[float] = None,
     fallback_used: bool = False
 ) -> PrescriptionResponse:
-    """Create a PrescriptionResponse instance.
-    
-    Parameters
-    ----------
-    prescription_id : str
-        Prescription identifier
-    medicines : list[MedicineDetail]
-        List of extracted medicines
-    image_path : str, optional
-        Path to image file
-    extraction_time : float, optional
-        Time taken in seconds
-    fallback_used : bool, optional
-        Whether fallback model was used
-    
-    Returns
-    -------
-    PrescriptionResponse
-        Complete prescription response
-    """
+
     return PrescriptionResponse(
         prescription_id=prescription_id,
         image_path=image_path,

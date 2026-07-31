@@ -707,22 +707,13 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (!medicine.isFieldUnread(medicine.composition))
-          _buildDetailField('Composition', medicine.composition, Icons.science_outlined),
+        // Side Effects (Urdu only, when present)
+        if (medicine.sideEffectsUrduShort != null && medicine.sideEffectsUrduShort!.isNotEmpty)
+          _buildUrduSummaryField('SIDE EFFECTS', medicine.sideEffectsUrduShort!, isWarning: true),
         
-        if (!medicine.isFieldUnread(medicine.uses))
-          _buildDetailField('Uses', medicine.uses, Icons.healing_outlined),
-        
-        if (!medicine.isFieldUnread(medicine.precautions))
-          _buildDetailField(
-            'Precautions',
-            medicine.precautions,
-            Icons.shield_outlined,
-            isWarning: true,
-          ),
-        
-        if (!medicine.isFieldUnread(medicine.manufacturer))
-          _buildDetailField('Manufacturer', medicine.manufacturer, Icons.business_outlined),
+        // Precautions (Urdu only, when present)
+        if (medicine.precautionsUrduShort != null && medicine.precautionsUrduShort!.isNotEmpty)
+          _buildUrduSummaryField('PRECAUTIONS', medicine.precautionsUrduShort!, isWarning: true),
       ],
     );
   }
@@ -749,6 +740,54 @@ class _HomeScreenState extends State<HomeScreen> {
             value,
             style: AppTextStyles.fieldValue.copyWith(
               color: isWarning ? AppColors.textPrimary : AppColors.textPrimary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUrduSummaryField(String label, String urduText, {bool isWarning = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.translate,
+                size: 16,
+                color: isWarning ? AppColors.warning : AppColors.textSecondary,
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Text(label.toUpperCase(), style: AppTextStyles.fieldLabel),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            decoration: BoxDecoration(
+              color: isWarning 
+                  ? AppColors.warning.withOpacity(0.05)
+                  : AppColors.urduBackground,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              border: Border.all(
+                color: isWarning 
+                    ? AppColors.warning.withOpacity(0.2)
+                    : Colors.amber.shade200,
+              ),
+            ),
+            child: Directionality(
+              textDirection: TextDirection.rtl,
+              child: Text(
+                urduText,
+                style: AppTextStyles.urduText.copyWith(
+                  fontSize: 15,
+                  height: 1.8,
+                ),
+              ),
             ),
           ),
         ],

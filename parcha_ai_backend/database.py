@@ -1,6 +1,8 @@
 
+import os
 import uuid
 from datetime import datetime
+from pathlib import Path
 
 from sqlalchemy import Column, DateTime, String, Text, create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -9,7 +11,13 @@ from .config import get_config
 
 config = get_config()
 
-DB_PATH = config.project_root / "data" / "parcha_ai.db"
+# Allow DB_PATH override via environment variable for deployment
+DB_PATH_ENV = os.getenv("DB_PATH")
+if DB_PATH_ENV:
+    DB_PATH = Path(DB_PATH_ENV)
+else:
+    DB_PATH = config.project_root / "data" / "parcha_ai.db"
+
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 

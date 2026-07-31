@@ -38,7 +38,7 @@ class ApiException implements Exception {
 
 class ApiService {
 
-  static const String baseUrl = "http://YOUR_PC_IP:8000";
+  static const String baseUrl = "YOUR_BACKEND_URL";
   
   static const Duration requestTimeout = Duration(seconds: 30);
 

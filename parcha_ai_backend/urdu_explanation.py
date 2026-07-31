@@ -56,7 +56,7 @@ URDU_INSTRUCTION_TEMPLATE = """آپ ایک پاکستانی مریض کے لیے
 - کوئی بھی خوراک، وقت، یا دورانیہ کا اندازہ نہ لگائیں -- صرف وہی معلومات بولیں جو
   اوپر فیلڈز میں دی گئی ہیں۔
 - اردو کے مکمل رکے ہوئے وقفوں کے لیے "۔" استعمال کریں۔
-- دوا کا نام قدرتی اردو تلفظ میں لکھیں تاکہ TTS آواز درست بول سکے۔
+- دوا کا نام بالکل یوں لکھیں: {urdu_pronunciation} — اسے تبدیل، ترجمہ یا دوبارہ ہجے نہ کریں۔
 
 مثال کے طور پر ساخت کچھ یوں ہوگی (الفاظ نقل نہ کریں، صرف ترتیب کی مثال ہے):
 "آپ کی پہلی دوا ازیتھرومائسن پانچ سو ملی گرام ہے۔ ایک گولی دن میں ایک بار صبح کھانے کے بعد لیں۔ یہ دوا پانچ دن تک جاری رکھیں۔ دوا لینے سے پہلے اپنے فارماسسٹ یا ڈاکٹر سے تصدیق کر لیں۔"
@@ -69,7 +69,7 @@ class UrduPromptTemplate:
 
     template: str = URDU_INSTRUCTION_TEMPLATE
     input_variables: tuple = (
-        "medicine_name", "dosage", "frequency", "duration", "purpose", "ordinal_phrase"
+        "medicine_name", "dosage", "frequency", "duration", "purpose", "ordinal_phrase", "urdu_pronunciation"
     )
 
     def format(self, **kwargs) -> str:
@@ -169,18 +169,12 @@ class UrduExplainer:
         return any(keyword in freq for keyword in self._PRN_KEYWORDS)
 
     async def explain(self, medicine: MedicineDetail, position: int = 0) -> str:
-        """
-        Generate one structured Urdu instruction for a single medicine.
 
-        Parameters
-        ----------
-        medicine : MedicineDetail
-        position : int, optional
-            0-indexed position of this medicine within the prescription.
-            Used only to decide between "پہلی دوا" (first medicine) and
-            "اگلی دوا" (next medicine) in the announcement -- it does not
-            affect dosage/frequency/duration content.
-        """
+        # Resolve pronunciation BEFORE LLM call (fixes inconsistent transliteration)
+        from .pronunciation import resolve_pronunciation
+        
+        urdu_pronunciation = resolve_pronunciation(medicine.medicine_name)
+        
         prompt = self.prompt_template.format(
             medicine_name=medicine.medicine_name,
             dosage=medicine.dosage,
@@ -188,6 +182,7 @@ class UrduExplainer:
             duration=medicine.duration,
             purpose=medicine.purpose,
             ordinal_phrase=self._ordinal_phrase(position),
+            urdu_pronunciation=urdu_pronunciation, 
         )
         start = time.time()
         text = self._sanitize_urdu_text(await self._call_groq_text(prompt))
