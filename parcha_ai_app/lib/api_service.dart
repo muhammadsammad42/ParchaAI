@@ -38,7 +38,7 @@ class ApiException implements Exception {
 
 class ApiService {
 
-  static const String baseUrl = "YOUR_BACKEND_URL";
+  static const String baseUrl = "https://parchaai.up.railway.app";
   
   static const Duration requestTimeout = Duration(seconds: 30);
 
