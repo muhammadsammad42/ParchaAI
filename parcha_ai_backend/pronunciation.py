@@ -252,13 +252,14 @@ def _log_for_review(medicine_name: str, tier: int, urdu: str, details: str = "")
 
 
 # =============================================================================
-# MEDICINE NAME NORMALIZATION (Step 1)
+# MEDICINE NAME NORMALIZATION (Step 1 + Leading Forms Fix)
 # =============================================================================
-# Strip trailing route/form words to extract core drug name for pronunciation.
+# Strip leading/trailing dosage form abbreviations to extract core drug name.
 # This is ONLY for pronunciation resolution input — full name used everywhere else.
 
-# Explicit list of route/form suffixes to strip (order matters: longest first)
-ROUTE_FORM_SUFFIXES = [
+# Explicit list of dosage forms to strip from START or END (order matters: longest first)
+# Covers common variations with/without periods, case-insensitive matching
+DOSAGE_FORM_PATTERNS = [
     "ear drops",
     "eye drops", 
     "nasal drops",
@@ -270,16 +271,23 @@ ROUTE_FORM_SUFFIXES = [
     "capsules",
     "injection",
     "suspension",
+    "powder",
+    "lotion",
     "cream",
     "ointment",
     "gel",
     "solution",
+    "spray",
+    "inhaler",
+    "patch",
     "tab.",
     "tab",
     "cap.",
     "cap",
     "inj.",
     "inj",
+    "syr.",
+    "syr",
     "susp.",
     "susp",
 ]
@@ -287,15 +295,19 @@ ROUTE_FORM_SUFFIXES = [
 
 def _normalize_for_pronunciation(medicine_name: str) -> str:
     """
-    Extract core drug name for pronunciation by stripping route/form suffixes.
+    Extract core drug name for pronunciation by stripping dosage form abbreviations.
+    
+    Strips both LEADING and TRAILING dosage forms (e.g., "Tab.", "drops", "Inj.").
+    Case-insensitive matching. Preserves internal punctuation (hyphens, numbers).
     
     This normalization is ONLY for pronunciation resolution input.
     The full original name is still used everywhere else (display, dosage, matching).
     
     Examples:
+        "Tab. Lanol-ER" → "Lanol-ER"
         "Candibiotic ear drops" → "Candibiotic"
-        "Taxim O drops" → "Taxim O"
-        "Tab. Augmentin" → "Augmentin"
+        "Cap Amoxil 500mg" → "Amoxil 500mg"
+        "Inj. Augmentin" → "Augmentin"
         "Paracetamol" → "Paracetamol" (unchanged)
     
     Parameters
@@ -309,21 +321,42 @@ def _normalize_for_pronunciation(medicine_name: str) -> str:
         Core drug name, or original name if stripping results in empty string
     """
     normalized = medicine_name.strip()
-    normalized_lower = normalized.lower()
+    original_normalized = normalized  # Keep for logging
     
-    # Try stripping each suffix (longest first to avoid partial matches)
-    for suffix in ROUTE_FORM_SUFFIXES:
-        if normalized_lower.endswith(suffix):
-            # Strip suffix and any preceding whitespace/punctuation
-            core_name = normalized[:-(len(suffix))].rstrip(" .-")
+    # Strip LEADING dosage forms (longest first to avoid partial matches)
+    for pattern in DOSAGE_FORM_PATTERNS:
+        normalized_lower = normalized.lower()
+        
+        # Check if starts with pattern (case-insensitive)
+        if normalized_lower.startswith(pattern):
+            # Strip pattern and any following whitespace/punctuation
+            core_name = normalized[len(pattern):].lstrip(" .-")
             
-            # If result is non-empty, use it; otherwise try next suffix
+            # If result is non-empty, use it
             if core_name.strip():
-                logger.debug(f"Normalized for pronunciation: '{medicine_name}' → '{core_name}'")
-                return core_name.strip()
+                normalized = core_name.strip()
+                break  # Only strip one leading pattern
     
-    # No suffix matched or stripping resulted in empty string — return original
-    return normalized
+    # Strip TRAILING dosage forms (longest first to avoid partial matches)
+    for pattern in DOSAGE_FORM_PATTERNS:
+        normalized_lower = normalized.lower()
+        
+        # Check if ends with pattern (case-insensitive)
+        if normalized_lower.endswith(pattern):
+            # Strip pattern and any preceding whitespace/punctuation
+            core_name = normalized[:-(len(pattern))].rstrip(" .-")
+            
+            # If result is non-empty, use it
+            if core_name.strip():
+                normalized = core_name.strip()
+                break  # Only strip one trailing pattern
+    
+    # Log only if normalization changed the name
+    if normalized != original_normalized:
+        logger.debug(f"Normalized for pronunciation: '{original_normalized}' → '{normalized}'")
+    
+    # If stripping resulted in empty string, return original
+    return normalized if normalized.strip() else medicine_name.strip()
 
 
 # =============================================================================
