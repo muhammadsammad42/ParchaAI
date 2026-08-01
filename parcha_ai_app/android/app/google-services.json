@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "879870760502",
+    "project_id": "parchaai",
+    "storage_bucket": "parchaai.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:879870760502:android:5bd9905bf631d6a5a7aa97",
+        "android_client_info": {
+          "package_name": "com.example.parcha_ai_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAzxs8G8j0vNfQsgE5FOufi_L7tusvnskw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
