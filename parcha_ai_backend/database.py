@@ -35,6 +35,9 @@ class Prescription(Base):
     __tablename__ = "prescriptions"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    prescription_id = Column(String, nullable=False)
+    filename = Column(String, nullable=False)  
+    audio_data = Column(Text, nullable=False)  
     image_path = Column(String, nullable=False)
     image_data = Column(Text, nullable=True)
     status = Column(String, nullable=False, default="pending")  # pending|processing|done|failed

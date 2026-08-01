@@ -1,4 +1,3 @@
-
 """
 FastAPI backend for the ParchaAI Flutter app
 
@@ -20,12 +19,13 @@ from typing import Optional
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from .celery_tasks import process_prescription_task
 from .config import get_config, setup_logging
-from .database import Prescription, get_db, init_db
+from .database import AudioClip, Prescription, get_db, init_db
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -67,13 +67,14 @@ async def on_startup():
 
 def _to_audio_url(local_path: Optional[str], request: Request) -> Optional[str]:
     """Convert a local .mp3 path (as stored by TextToSpeechEngine) into a
-    public URL served by the /audio static mount. Returns None if the
-    medicine's audio failed to generate (local_path is None) or the file
-    isn't actually under AUDIO_DIR for some reason."""
+    public URL served via /audio-file/{filename}, which reads the audio
+    bytes back out of the DB (AudioClip table) rather than the local
+    filesystem -- the worker that generated the file and the web service
+    serving it are separate containers with no shared disk."""
     if not local_path:
         return None
     filename = Path(local_path).name
-    return str(request.base_url).rstrip("/") + f"/audio/{filename}"
+    return str(request.base_url).rstrip("/") + f"/audio-file/{filename}"
 
 
 def _attach_audio_urls(result: dict, request: Request) -> dict:
@@ -182,6 +183,21 @@ async def get_result(prescription_id: str, request: Request, db: Session = Depen
     result = json.loads(record.result_json)
     result = _attach_audio_urls(result, request)
     return result
+
+
+@app.get("/audio-file/{filename}")
+async def get_audio_file(filename: str, db: Session = Depends(get_db)):
+    """
+    Serve an audio clip's bytes from the DB (AudioClip table) rather than
+    the local filesystem. Needed because the Celery worker that generates
+    the mp3 and the FastAPI web service serving it run in separate
+    containers with no shared disk/volume.
+    """
+    clip = db.query(AudioClip).filter_by(filename=filename).first()
+    if clip is None:
+        raise HTTPException(status_code=404, detail="Audio not found")
+    audio_bytes = base64.b64decode(clip.audio_data)
+    return Response(content=audio_bytes, media_type="audio/mpeg")
 
 
 @app.delete("/prescription/{prescription_id}")

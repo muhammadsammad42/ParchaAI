@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 from .celery_app import celery_app
-from .database import Prescription, SessionLocal
+from .database import AudioClip, Prescription, SessionLocal
 from .urdu_pipeline import UrduPipeline
 
 logger = logging.getLogger(__name__)
@@ -61,6 +61,28 @@ def process_prescription_task(self, prescription_id: str, image_path: str) -> di
 
         pipeline = UrduPipeline()
         result = asyncio.run(pipeline.process_image(local_image_path))
+
+        # NEW: persist generated audio bytes to the DB, since the worker's
+        # local /app/outputs/audio files are not visible to the web
+        # service (separate container/filesystem, no shared volume).
+        for medicine in result.medicines:
+            if medicine.audio_path and Path(medicine.audio_path).exists():
+                with open(medicine.audio_path, "rb") as f:
+                    audio_b64 = base64.b64encode(f.read()).decode("utf-8")
+                db.add(AudioClip(
+                    prescription_id=prescription_id,
+                    filename=Path(medicine.audio_path).name,
+                    audio_data=audio_b64,
+                ))
+
+        if result.combined_audio_path and Path(result.combined_audio_path).exists():
+            with open(result.combined_audio_path, "rb") as f:
+                combined_b64 = base64.b64encode(f.read()).decode("utf-8")
+            db.add(AudioClip(
+                prescription_id=prescription_id,
+                filename=Path(result.combined_audio_path).name,
+                audio_data=combined_b64,
+            ))
 
         record.status = "done"
         record.result_json = result.to_json()
