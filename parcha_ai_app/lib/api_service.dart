@@ -143,6 +143,28 @@ class ApiService {
     }
   }
 
+  /// Fetches the list of all prescriptions (for history screen)
+  Future<List<PrescriptionHistoryItem>> getPrescriptions() async {
+    try {
+      final uri = Uri.parse('$baseUrl/prescriptions');
+      final response = await http.get(uri).timeout(requestTimeout);
+
+      if (response.statusCode != 200) {
+        throw ApiException(response.statusCode, _extractDetail(response.body));
+      }
+
+      final body = jsonDecode(response.body) as List<dynamic>;
+      return body.map((item) => PrescriptionHistoryItem.fromJson(item as Map<String, dynamic>)).toList();
+    } on SocketException {
+      throw ApiException(0, 'Lost connection to server');
+    } on TimeoutException {
+      throw ApiException(408, 'Request timed out');
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException(0, 'Failed to fetch prescriptions: $e');
+    }
+  }
+
   Future<PrescriptionResult> uploadAndWaitForResult(
     File imageFile, {
     Duration interval = const Duration(seconds: 2),

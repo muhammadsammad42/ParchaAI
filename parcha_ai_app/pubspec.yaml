@@ -13,6 +13,7 @@ dependencies:
   http: ^1.2.2                # calling /upload, /status, /result
   image_picker: ^1.1.2        # camera / gallery picker for the prescription photo
   audioplayers: ^6.1.0        # plays the Urdu .mp3 from the returned audio_url
+  intl: ^0.19.0               # date formatting for prescription history
 
 dev_dependencies:
   flutter_test:

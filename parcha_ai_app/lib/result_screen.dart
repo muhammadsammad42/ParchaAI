@@ -1,34 +1,36 @@
-
-import 'dart:io';
-
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 
 import 'api_service.dart';
-import 'history_screen.dart';
 import 'models.dart';
 import 'theme.dart';
 
-enum _ScreenState { idle, checkingHealth, uploading, polling, done, error }
+class ResultScreen extends StatefulWidget {
+  final String prescriptionId;
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const ResultScreen({
+    super.key,
+    required this.prescriptionId,
+  });
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<ResultScreen> createState() => _ResultScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _ResultScreenState extends State<ResultScreen> {
   final ApiService _api = ApiService();
-  final ImagePicker _picker = ImagePicker();
   final AudioPlayer _audioPlayer = AudioPlayer();
 
-  File? _selectedImage;
-  _ScreenState _state = _ScreenState.idle;
-  String _statusMessage = '';
+  bool _isLoading = true;
+  String? _errorMessage;
   PrescriptionResult? _result;
   String? _currentlyPlayingUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadResult();
+  }
 
   @override
   void dispose() {
@@ -36,83 +38,30 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  Future<void> _pickImage(ImageSource source) async {
-    final picked = await _picker.pickImage(source: source, imageQuality: 90);
-    if (picked == null) return;
-
+  Future<void> _loadResult() async {
     setState(() {
-      _selectedImage = File(picked.path);
-      _state = _ScreenState.idle;
-      _result = null;
-      _statusMessage = '';
-    });
-  }
-
-  Future<void> _uploadAndProcess() async {
-    if (_selectedImage == null) return;
-
-    // First, check if backend is healthy
-    setState(() {
-      _state = _ScreenState.checkingHealth;
-      _statusMessage = 'Checking connection to server...';
-    });
-
-    final isHealthy = await _api.checkHealth();
-    if (!isHealthy) {
-      if (!mounted) return;
-      setState(() {
-        _state = _ScreenState.error;
-        _statusMessage = 
-            'Cannot connect to backend server.\n\n'
-            'Please verify:\n'
-            '• Backend is running (uvicorn + Redis + Celery worker)\n'
-            '• Phone and laptop are on the same Wi-Fi network\n'
-            '• Base URL in api_service.dart is set to your laptop\'s LAN IP';
-      });
-      return;
-    }
-
-    setState(() {
-      _state = _ScreenState.uploading;
-      _statusMessage = 'Uploading prescription...';
+      _isLoading = true;
+      _errorMessage = null;
     });
 
     try {
-      final result = await _api.uploadAndWaitForResult(
-        _selectedImage!,
-        onStatusUpdate: (status) {
-          if (!mounted) return;
-          setState(() {
-            _state = _ScreenState.polling;
-            _statusMessage = switch (status) {
-              PrescriptionStatus.pending => 'Waiting in queue...',
-              PrescriptionStatus.processing => 
-                  'Reading prescription...\nExtracting medicine details...\nGenerating Urdu explanations...\nCreating audio files...',
-              PrescriptionStatus.done => 'Done!',
-              PrescriptionStatus.failed => 'Processing failed.',
-              PrescriptionStatus.unknown => 'Checking status...',
-            };
-          });
-        },
-      );
-
+      final result = await _api.getResult(widget.prescriptionId);
       if (!mounted) return;
       setState(() {
         _result = result;
-        _state = _ScreenState.done;
-        _statusMessage = '';
+        _isLoading = false;
       });
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
-        _state = _ScreenState.error;
-        _statusMessage = e.userMessage;
+        _errorMessage = e.userMessage;
+        _isLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _state = _ScreenState.error;
-        _statusMessage = 'Unexpected error: $e';
+        _errorMessage = 'Failed to load result: $e';
+        _isLoading = false;
       });
     }
   }
@@ -135,224 +84,80 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Row(
+        title: const Row(
           children: [
             Icon(Icons.medical_services, color: AppColors.textOnPrimary),
-            const SizedBox(width: AppSpacing.sm),
-            const Text('ParchaAI'),
+            SizedBox(width: AppSpacing.sm),
+            Text('Prescription Details'),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.history),
-            tooltip: 'Prescription History',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const HistoryScreen(),
-                ),
-              );
-            },
-          ),
-        ],
       ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          children: [
-            _buildImagePickerCard(),
-            const SizedBox(height: AppSpacing.md),
-            _buildUploadButton(),
-            const SizedBox(height: AppSpacing.md),
-            if (_state == _ScreenState.checkingHealth ||
-                _state == _ScreenState.uploading || 
-                _state == _ScreenState.polling)
-              _buildProgress(),
-            if (_state == _ScreenState.error) _buildError(),
-            if (_state == _ScreenState.done && _result != null) 
-              _buildResults(_result!),
-          ],
-        ),
+        child: _buildBody(),
       ),
     );
   }
 
-  Widget _buildImagePickerCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              'Upload Prescription',
-              style: AppTextStyles.h3,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'Take a photo or select from gallery',
-              style: AppTextStyles.bodySmall,
-            ),
-            const SizedBox(height: AppSpacing.md),
-            if (_selectedImage != null)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-                child: Image.file(
-                  _selectedImage!,
-                  height: 240,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                ),
-              )
-            else
-              Container(
-                height: 240,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceVariant,
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                  border: Border.all(
-                    color: AppColors.borderLight,
-                    width: 2,
-                    strokeAlign: BorderSide.strokeAlignInside,
-                  ),
-                ),
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.image_outlined,
-                        size: 64,
-                        color: AppColors.textTertiary,
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      Text(
-                        'No prescription image selected',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: AppColors.textTertiary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            const SizedBox(height: AppSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _pickImage(ImageSource.camera),
-                    icon: const Icon(Icons.camera_alt_outlined),
-                    label: const Text('Camera'),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _pickImage(ImageSource.gallery),
-                    icon: const Icon(Icons.photo_library_outlined),
-                    label: const Text('Gallery'),
-                  ),
-                ),
-              ],
-            ),
+            CircularProgressIndicator(),
+            SizedBox(height: AppSpacing.md),
+            Text('Loading prescription...', style: AppTextStyles.bodyMedium),
           ],
         ),
-      ),
-    );
-  }
+      );
+    }
 
-  Widget _buildUploadButton() {
-    final busy = _state == _ScreenState.checkingHealth ||
-                 _state == _ScreenState.uploading || 
-                 _state == _ScreenState.polling;
-    
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: (_selectedImage == null || busy) ? null : _uploadAndProcess,
-        icon: busy
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : const Icon(Icons.upload_file, size: 24),
-        label: Padding(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-          child: Text(
-            busy ? 'Processing...' : 'Get Urdu Instructions',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: AppColors.error,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                'Error',
+                style: AppTextStyles.h2.copyWith(color: AppColors.error),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                _errorMessage!,
+                style: AppTextStyles.bodyMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              ElevatedButton.icon(
+                onPressed: _loadResult,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
           ),
         ),
-      ),
-    );
-  }
+      );
+    }
 
-  Widget _buildProgress() {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.info.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.info.withOpacity(0.3)),
-      ),
-      child: Row(
-        children: [
-          const SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(strokeWidth: 2.5),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Text(
-              _statusMessage,
-              style: AppTextStyles.bodyMedium,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+    if (_result == null) {
+      return const Center(
+        child: Text('No result available', style: AppTextStyles.bodyMedium),
+      );
+    }
 
-  Widget _buildError() {
-    return Container(
+    return ListView(
       padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.error.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.error.withOpacity(0.3)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.error_outline, color: AppColors.error, size: 24),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Error',
-                  style: AppTextStyles.h3.copyWith(color: AppColors.error),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  _statusMessage,
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: AppColors.error.withOpacity(0.9),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      children: [
+        _buildResults(_result!),
+      ],
     );
   }
 
@@ -730,35 +535,6 @@ class _HomeScreenState extends State<HomeScreen> {
         if (medicine.precautionsUrduShort != null && medicine.precautionsUrduShort!.isNotEmpty)
           _buildUrduSummaryField('PRECAUTIONS', medicine.precautionsUrduShort!, isWarning: true),
       ],
-    );
-  }
-
-  Widget _buildDetailField(String label, String value, IconData icon, {bool isWarning = false}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                icon,
-                size: 16,
-                color: isWarning ? AppColors.warning : AppColors.textSecondary,
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              Text(label.toUpperCase(), style: AppTextStyles.fieldLabel),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            value,
-            style: AppTextStyles.fieldValue.copyWith(
-              color: isWarning ? AppColors.textPrimary : AppColors.textPrimary,
-            ),
-          ),
-        ],
-      ),
     );
   }
 

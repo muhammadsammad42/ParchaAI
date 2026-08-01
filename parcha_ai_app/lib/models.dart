@@ -217,3 +217,26 @@ PrescriptionStatus statusFromString(String? value) {
       return PrescriptionStatus.unknown;
   }
 }
+
+/// Prescription history item (from GET /prescriptions)
+class PrescriptionHistoryItem {
+  final String prescriptionId;
+  final PrescriptionStatus status;
+  final DateTime? createdAt;
+
+  PrescriptionHistoryItem({
+    required this.prescriptionId,
+    required this.status,
+    this.createdAt,
+  });
+
+  factory PrescriptionHistoryItem.fromJson(Map<String, dynamic> json) {
+    return PrescriptionHistoryItem(
+      prescriptionId: json['prescription_id'] as String? ?? '',
+      status: statusFromString(json['status'] as String?),
+      createdAt: json['created_at'] != null 
+          ? DateTime.tryParse(json['created_at'] as String)
+          : null,
+    );
+  }
+}

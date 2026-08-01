@@ -200,6 +200,20 @@ async def get_audio_file(filename: str, db: Session = Depends(get_db)):
     return Response(content=audio_bytes, media_type="audio/mpeg")
 
 
+@app.get("/prescriptions")
+async def list_prescriptions(db: Session = Depends(get_db)):
+    """Read-only list of all prescriptions, most recent first, for the history screen."""
+    records = db.query(Prescription).order_by(Prescription.created_at.desc()).all()
+    return [
+        {
+            "prescription_id": r.id,
+            "status": r.status,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in records
+    ]
+
+
 @app.delete("/prescription/{prescription_id}")
 async def delete_prescription(prescription_id: str, db: Session = Depends(get_db)):
     record = db.query(Prescription).filter_by(id=prescription_id).first()
