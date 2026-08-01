@@ -41,8 +41,13 @@ class Prescription(Base):
 
 
 def init_db() -> None:
-    """Create tables if they don't exist yet. Safe to call on every startup."""
-    Base.metadata.create_all(bind=engine)
+    import logging
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as exc:
+        logging.getLogger(__name__).warning(
+            f"init_db: create_all raised (likely tables already exist): {exc}"
+        )
 
 
 def get_db():
