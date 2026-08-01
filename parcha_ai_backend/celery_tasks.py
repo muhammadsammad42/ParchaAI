@@ -1,7 +1,9 @@
-
 import asyncio
+import base64
 import json
 import logging
+import tempfile
+from pathlib import Path
 
 from .celery_app import celery_app
 from .database import Prescription, SessionLocal
@@ -20,7 +22,10 @@ def process_prescription_task(self, prescription_id: str, image_path: str) -> di
     prescription_id : str
         Primary key of the Prescription row to update.
     image_path : str
-        Path to the saved upload on disk.
+        Path to the saved upload on the WEB service's disk (not readable
+        here, since the worker is a separate container/filesystem -- kept
+        only to preserve the file extension). The actual image bytes are
+        reconstructed from record.image_data (base64, stored in the DB).
 
     Returns
     -------
@@ -37,12 +42,25 @@ def process_prescription_task(self, prescription_id: str, image_path: str) -> di
         logger.error("Task fired for unknown prescription_id=%s", prescription_id)
         return {"status": "failed", "prescription_id": prescription_id, "error": "record not found"}
 
+    tmp_path = None
     try:
         record.status = "processing"
         db.commit()
 
+        if record.image_data:
+            image_bytes = base64.b64decode(record.image_data)
+            suffix = Path(image_path).suffix or ".jpg"
+            tmp_file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+            tmp_file.write(image_bytes)
+            tmp_file.close()
+            tmp_path = tmp_file.name
+            local_image_path = tmp_path
+        else:
+            # Fallback for older records without image_data (pre-migration)
+            local_image_path = image_path
+
         pipeline = UrduPipeline()
-        result = asyncio.run(pipeline.process_image(image_path))
+        result = asyncio.run(pipeline.process_image(local_image_path))
 
         record.status = "done"
         record.result_json = result.to_json()
@@ -61,3 +79,8 @@ def process_prescription_task(self, prescription_id: str, image_path: str) -> di
 
     finally:
         db.close()
+        if tmp_path:
+            try:
+                Path(tmp_path).unlink(missing_ok=True)
+            except Exception:
+                pass

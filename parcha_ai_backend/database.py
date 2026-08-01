@@ -36,6 +36,7 @@ class Prescription(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     image_path = Column(String, nullable=False)
+    image_data = Column(Text, nullable=True)
     status = Column(String, nullable=False, default="pending")  # pending|processing|done|failed
     result_json = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)

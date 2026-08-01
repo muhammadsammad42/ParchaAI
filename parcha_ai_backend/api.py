@@ -11,6 +11,7 @@ Flow the Flutter app follows:
 And Redis itself running (local `redis-server`, or a free-tier hosted Redis).
 """
 
+import base64
 import json
 import logging
 import uuid
@@ -125,7 +126,14 @@ async def upload_prescription(file: UploadFile = File(...), db: Session = Depend
     with open(image_path, "wb") as f:
         f.write(contents)
 
-    record = Prescription(id=prescription_id, image_path=str(image_path), status="pending")
+    image_b64 = base64.b64encode(contents).decode("utf-8")
+
+    record = Prescription(
+        id=prescription_id,
+        image_path=str(image_path),
+        image_data=image_b64,
+        status="pending",
+    )
     db.add(record)
     db.commit()
 
