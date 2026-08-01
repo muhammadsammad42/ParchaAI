@@ -252,6 +252,81 @@ def _log_for_review(medicine_name: str, tier: int, urdu: str, details: str = "")
 
 
 # =============================================================================
+# MEDICINE NAME NORMALIZATION (Step 1)
+# =============================================================================
+# Strip trailing route/form words to extract core drug name for pronunciation.
+# This is ONLY for pronunciation resolution input — full name used everywhere else.
+
+# Explicit list of route/form suffixes to strip (order matters: longest first)
+ROUTE_FORM_SUFFIXES = [
+    "ear drops",
+    "eye drops", 
+    "nasal drops",
+    "drops",
+    "syrup",
+    "tablet",
+    "tablets",
+    "capsule",
+    "capsules",
+    "injection",
+    "suspension",
+    "cream",
+    "ointment",
+    "gel",
+    "solution",
+    "tab.",
+    "tab",
+    "cap.",
+    "cap",
+    "inj.",
+    "inj",
+    "susp.",
+    "susp",
+]
+
+
+def _normalize_for_pronunciation(medicine_name: str) -> str:
+    """
+    Extract core drug name for pronunciation by stripping route/form suffixes.
+    
+    This normalization is ONLY for pronunciation resolution input.
+    The full original name is still used everywhere else (display, dosage, matching).
+    
+    Examples:
+        "Candibiotic ear drops" → "Candibiotic"
+        "Taxim O drops" → "Taxim O"
+        "Tab. Augmentin" → "Augmentin"
+        "Paracetamol" → "Paracetamol" (unchanged)
+    
+    Parameters
+    ----------
+    medicine_name : str
+        Full medicine name as extracted
+    
+    Returns
+    -------
+    str
+        Core drug name, or original name if stripping results in empty string
+    """
+    normalized = medicine_name.strip()
+    normalized_lower = normalized.lower()
+    
+    # Try stripping each suffix (longest first to avoid partial matches)
+    for suffix in ROUTE_FORM_SUFFIXES:
+        if normalized_lower.endswith(suffix):
+            # Strip suffix and any preceding whitespace/punctuation
+            core_name = normalized[:-(len(suffix))].rstrip(" .-")
+            
+            # If result is non-empty, use it; otherwise try next suffix
+            if core_name.strip():
+                logger.debug(f"Normalized for pronunciation: '{medicine_name}' → '{core_name}'")
+                return core_name.strip()
+    
+    # No suffix matched or stripping resulted in empty string — return original
+    return normalized
+
+
+# =============================================================================
 # TIER 1: MANUAL DICTIONARY LOOKUP
 # =============================================================================
 
@@ -295,19 +370,33 @@ def _g2p_to_urdu(medicine_name: str) -> Tuple[Optional[str], Optional[str]]:
         arpabet_str = " ".join(phonemes)
         logger.debug(f"G2P phonemes for '{medicine_name}': {arpabet_str}")
         
-        # Map each ARPAbet phoneme to Urdu
+        # Map each ARPAbet phoneme to Urdu (Step 2: fail-safe mapping)
         urdu_chars = []
+        unknown_phonemes = []
+        
         for phoneme in phonemes:
             # Remove stress markers (0, 1, 2) from end of phoneme
             phoneme_clean = re.sub(r'[012]$', '', phoneme)
             
-            urdu_char = ARPABET_TO_URDU.get(phoneme_clean, "")
+            # Skip empty phonemes (e.g., from extra spaces)
+            if not phoneme_clean:
+                continue
             
-            if not urdu_char and phoneme_clean:
-                # Unknown phoneme - log warning but continue
-                logger.warning(f"Unknown ARPAbet phoneme: {phoneme_clean} in {medicine_name}")
+            urdu_char = ARPABET_TO_URDU.get(phoneme_clean)
             
-            urdu_chars.append(urdu_char)
+            if urdu_char is not None:
+                urdu_chars.append(urdu_char)
+            else:
+                # Unknown/unmapped phoneme: log to review but DON'T add to output
+                unknown_phonemes.append(phoneme_clean)
+        
+        # Log unknown phonemes to review log (not main log to avoid spam)
+        if unknown_phonemes:
+            _ensure_review_log()
+            review_logger.warning(
+                f"Unknown ARPAbet phoneme(s) in '{medicine_name}': {', '.join(unknown_phonemes)} | "
+                f"Full ARPAbet: {arpabet_str}"
+            )
         
         urdu_result = "".join(urdu_chars)
         
@@ -417,35 +506,38 @@ def resolve_pronunciation(medicine_name: str) -> str:
     
     medicine_name = medicine_name.strip()
     
-    # Check cache first
+    # Check cache first (using FULL name as key)
     cached = _get_cached_pronunciation(medicine_name)
     if cached:
         return cached
     
-    # Tier 1: Manual dictionary
-    manual_result = _lookup_manual_dict(medicine_name)
+    # Normalize name for pronunciation (strip route/form words)
+    normalized_name = _normalize_for_pronunciation(medicine_name)
+    
+    # Tier 1: Manual dictionary (check both full and normalized names)
+    manual_result = _lookup_manual_dict(normalized_name)
     if manual_result:
         _cache_pronunciation(medicine_name, manual_result, "manual_dict")
         return manual_result
     
-    # Tier 2: G2P + ARPAbet mapping
-    g2p_result, arpabet = _g2p_to_urdu(medicine_name)
+    # Tier 2: G2P + ARPAbet mapping (use normalized name)
+    g2p_result, arpabet = _g2p_to_urdu(normalized_name)
     if g2p_result:
-        _log_for_review(medicine_name, tier=2, urdu=g2p_result, details=f"ARPAbet: {arpabet}")
+        _log_for_review(medicine_name, tier=2, urdu=g2p_result, details=f"Normalized: {normalized_name} | ARPAbet: {arpabet}")
         _cache_pronunciation(medicine_name, g2p_result, "g2p", arpabet=arpabet)
         return g2p_result
     
-    # Tier 3: LLM fallback (only if G2P failed sanity check)
-    llm_result = _llm_transliterate(medicine_name)
+    # Tier 3: LLM fallback (use normalized name, only if G2P failed sanity check)
+    llm_result = _llm_transliterate(normalized_name)
     if llm_result:
-        _log_for_review(medicine_name, tier=3, urdu=llm_result, details="LLM fallback")
+        _log_for_review(medicine_name, tier=3, urdu=llm_result, details=f"Normalized: {normalized_name} | LLM fallback")
         _cache_pronunciation(medicine_name, llm_result, "llm")
         return llm_result
     
     # All tiers failed
     raise PronunciationError(
-        f"Could not resolve pronunciation for '{medicine_name}' using any tier "
-        "(manual dict, G2P, LLM all failed)"
+        f"Could not resolve pronunciation for '{medicine_name}' (normalized: '{normalized_name}') "
+        f"using any tier (manual dict, G2P, LLM all failed)"
     )
 
 
