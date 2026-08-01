@@ -38,7 +38,6 @@ COPY drug_database/ /app/drug_database/
 # Create necessary directories for runtime (data will be on mounted volume)
 RUN mkdir -p /app/data /app/outputs/audio /app/cache /app/logs
 
-# Expose port 8080 (Fly.io default)
 EXPOSE 8080
 
 # Health check endpoint
@@ -46,4 +45,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8080/health', timeout=5)"
 
 # Run FastAPI with uvicorn
-CMD ["sh", "-c", "uvicorn parcha_ai_backend.api:app --host 0.0.0.0 --port $PORT --workers 2 --no-access-log"]
+CMD ["sh", "-c", "uvicorn parcha_ai_backend.api:app --host 0.0.0.0 --port $PORT --no-access-log"]
