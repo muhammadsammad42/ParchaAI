@@ -35,20 +35,29 @@ class Prescription(Base):
     __tablename__ = "prescriptions"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    prescription_id = Column(String, nullable=False)
-    filename = Column(String, nullable=False)  
-    audio_data = Column(Text, nullable=False)  
     image_path = Column(String, nullable=False)
-    image_data = Column(Text, nullable=True)
-    status = Column(String, nullable=False, default="pending")  # pending|processing|done|failed
+    image_data = Column(Text, nullable=True)  # base64-encoded image bytes
+    status = Column(String, nullable=False, default="pending")
     result_json = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class AudioClip(Base):
+    """One row per generated audio file (per-medicine or combined)."""
+
+    __tablename__ = "audio_clips"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    prescription_id = Column(String, nullable=False)
+    filename = Column(String, nullable=False)
+    audio_data = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 def init_db() -> None:
-    
+    """Create tables if they don't exist yet. Safe to call on every startup."""
     import logging
     try:
         Base.metadata.create_all(bind=engine)
@@ -59,7 +68,7 @@ def init_db() -> None:
 
 
 def get_db():
-    
+    """FastAPI dependency: yields a session, always closes it after the request."""
     db = SessionLocal()
     try:
         yield db
