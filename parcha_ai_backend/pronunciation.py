@@ -295,9 +295,11 @@ DOSAGE_FORM_PATTERNS = [
 
 def _normalize_for_pronunciation(medicine_name: str) -> str:
     """
-    Extract core drug name for pronunciation by stripping dosage form abbreviations.
+    Extract core drug name for pronunciation by stripping dosage form abbreviations
+    and handling compound/alternative names.
     
     Strips both LEADING and TRAILING dosage forms (e.g., "Tab.", "drops", "Inj.").
+    Handles compound names with separators (/, +, &, ,) by taking first segment.
     Case-insensitive matching. Preserves internal punctuation (hyphens, numbers).
     
     This normalization is ONLY for pronunciation resolution input.
@@ -305,6 +307,7 @@ def _normalize_for_pronunciation(medicine_name: str) -> str:
     
     Examples:
         "Tab. Lanol-ER" → "Lanol-ER"
+        "Fluid Electral/Glucon" → "Electral" (strips "Fluid" generic + takes first segment)
         "Candibiotic ear drops" → "Candibiotic"
         "Cap Amoxil 500mg" → "Amoxil 500mg"
         "Inj. Augmentin" → "Augmentin"
@@ -323,7 +326,16 @@ def _normalize_for_pronunciation(medicine_name: str) -> str:
     normalized = medicine_name.strip()
     original_normalized = normalized  # Keep for logging
     
-    # Strip LEADING dosage forms (longest first to avoid partial matches)
+    # Step 1: Handle compound/alternative names (split on /, +, &, ,)
+    # Take only the FIRST segment before any separator
+    # This prevents raw separators from reaching G2P (which has no phoneme mapping for them)
+    for separator in ['/', '+', '&', ',']:
+        if separator in normalized:
+            segments = normalized.split(separator)
+            normalized = segments[0].strip()
+            break  # Only split on first separator found
+    
+    # Step 2: Strip LEADING dosage forms (longest first to avoid partial matches)
     for pattern in DOSAGE_FORM_PATTERNS:
         normalized_lower = normalized.lower()
         
@@ -337,7 +349,7 @@ def _normalize_for_pronunciation(medicine_name: str) -> str:
                 normalized = core_name.strip()
                 break  # Only strip one leading pattern
     
-    # Strip TRAILING dosage forms (longest first to avoid partial matches)
+    # Step 3: Strip TRAILING dosage forms (longest first to avoid partial matches)
     for pattern in DOSAGE_FORM_PATTERNS:
         normalized_lower = normalized.lower()
         
@@ -350,6 +362,18 @@ def _normalize_for_pronunciation(medicine_name: str) -> str:
             if core_name.strip():
                 normalized = core_name.strip()
                 break  # Only strip one trailing pattern
+    
+    # Step 4: Strip common generic descriptors (Fluid, Liquid, etc.) if they're leading
+    # These are not dosage forms but generic product descriptors
+    generic_descriptors = ['fluid', 'liquid', 'powder', 'solution']
+    for descriptor in generic_descriptors:
+        normalized_lower = normalized.lower()
+        if normalized_lower.startswith(descriptor + ' '):
+            # Only strip if there's more after it (don't leave empty)
+            core_name = normalized[len(descriptor):].lstrip()
+            if core_name.strip():
+                normalized = core_name.strip()
+                break  # Only strip one descriptor
     
     # Log only if normalization changed the name
     if normalized != original_normalized:
@@ -516,8 +540,13 @@ def resolve_pronunciation(medicine_name: str) -> str:
     """
     Resolve English medicine name to Urdu script pronunciation.
     
-    Uses 3-tier fallback: manual dict → G2P → LLM.
+    Uses 3-tier fallback: manual dict → LLM → G2P (last resort).
     All results are cached. Tier 2/3 results are logged for review.
+    
+    Tier order rationale:
+    - Dictionary first (highest quality, manually verified)
+    - LLM second (produces natural Urdu without diacritics, consistently good results)
+    - G2P last resort (produces technical phonetic output with diacritics, only on LLM failure)
     
     Parameters
     ----------
@@ -544,7 +573,7 @@ def resolve_pronunciation(medicine_name: str) -> str:
     if cached:
         return cached
     
-    # Normalize name for pronunciation (strip route/form words)
+    # Normalize name for pronunciation (strip route/form words, handle compounds)
     normalized_name = _normalize_for_pronunciation(medicine_name)
     
     # Tier 1: Manual dictionary (check both full and normalized names)
@@ -553,24 +582,25 @@ def resolve_pronunciation(medicine_name: str) -> str:
         _cache_pronunciation(medicine_name, manual_result, "manual_dict")
         return manual_result
     
-    # Tier 2: G2P + ARPAbet mapping (use normalized name)
-    g2p_result, arpabet = _g2p_to_urdu(normalized_name)
-    if g2p_result:
-        _log_for_review(medicine_name, tier=2, urdu=g2p_result, details=f"Normalized: {normalized_name} | ARPAbet: {arpabet}")
-        _cache_pronunciation(medicine_name, g2p_result, "g2p", arpabet=arpabet)
-        return g2p_result
-    
-    # Tier 3: LLM fallback (use normalized name, only if G2P failed sanity check)
+    # Tier 2: LLM (use normalized name) - produces natural Urdu without diacritics
     llm_result = _llm_transliterate(normalized_name)
     if llm_result:
-        _log_for_review(medicine_name, tier=3, urdu=llm_result, details=f"Normalized: {normalized_name} | LLM fallback")
+        _log_for_review(medicine_name, tier=2, urdu=llm_result, details=f"Normalized: {normalized_name} | LLM")
         _cache_pronunciation(medicine_name, llm_result, "llm")
         return llm_result
+    
+    # Tier 3: G2P + ARPAbet mapping (last resort, only if LLM fails)
+    # Produces technical phonetic output with diacritics - use only on LLM API failure
+    g2p_result, arpabet = _g2p_to_urdu(normalized_name)
+    if g2p_result:
+        _log_for_review(medicine_name, tier=3, urdu=g2p_result, details=f"Normalized: {normalized_name} | ARPAbet: {arpabet} | G2P last resort")
+        _cache_pronunciation(medicine_name, g2p_result, "g2p", arpabet=arpabet)
+        return g2p_result
     
     # All tiers failed
     raise PronunciationError(
         f"Could not resolve pronunciation for '{medicine_name}' (normalized: '{normalized_name}') "
-        f"using any tier (manual dict, G2P, LLM all failed)"
+        f"using any tier (manual dict, LLM, G2P all failed)"
     )
 
 
