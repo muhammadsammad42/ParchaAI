@@ -3,12 +3,7 @@ import re
 from typing import Optional, Dict, Tuple
 
 
-# =============================================================================
-# UNIT NORMALIZATION MAPPINGS
-# =============================================================================
-
 UNIT_ALIASES = {
-    # Volume units
     "milliliters": "ml",
     "milliliter": "ml",
     "millilitres": "ml",
@@ -16,7 +11,6 @@ UNIT_ALIASES = {
     "mililiter": "ml",  
     "cc": "ml",  
     
-    # Weight units
     "milligrams": "mg",
     "milligram": "mg",
     "miligram": "mg",  
@@ -25,7 +19,6 @@ UNIT_ALIASES = {
     "grams": "g",
     "gram": "g",
     
-    # Other units
     "tablets": "tab",
     "tablet": "tab",
     "capsules": "cap",
@@ -42,10 +35,6 @@ UNIT_ALIASES = {
     "units": "unit",
 }
 
-
-# =============================================================================
-# FREQUENCY NORMALIZATION MAPPINGS
-# =============================================================================
 
 NUMERIC_FREQUENCY_MAP = {
     # Twice daily patterns
@@ -74,7 +63,6 @@ NUMERIC_FREQUENCY_MAP = {
 }
 
 FREQUENCY_PHRASE_MAP = [
-    # Multi-word phrases (must come first)
     ("three times a day", "three times a day"),
     ("three times daily", "three times a day"),
     ("thrice a day", "three times a day"),
@@ -200,10 +188,6 @@ FREQUENCY_ABBREVIATION_MAP = {
 }
 
 
-# =============================================================================
-# DURATION NORMALIZATION
-# =============================================================================
-
 WORD_NUMBER_MAP = {
     "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
     "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
@@ -233,10 +217,6 @@ DURATION_ALIASES = {
     "hours": "hours",
 }
 
-
-# =============================================================================
-# CORE NORMALIZATION FUNCTIONS
-# =============================================================================
 
 def normalize_whitespace(text: str) -> str:
     """Remove excessive whitespace and normalize to single spaces.
@@ -718,10 +698,6 @@ def is_null_or_unread(value: str) -> bool:
     normalized = value.lower().strip()
     return normalized in {"null", "none", "nan", "n/a", "na", "", "unread", "unknown"}
 
-
-# =============================================================================
-# CONVENIENCE ALIASES
-# =============================================================================
 
 def normalize_text(text: str) -> str:
     """

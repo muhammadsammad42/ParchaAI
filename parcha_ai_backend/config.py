@@ -34,8 +34,6 @@ class Config:
     # API KEYS & ENDPOINTS
     # =====================================================================
     gemini_api_key: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
-    # Base REST endpoint for Gemini's generateContent call. The model name is
-    # appended when building the final request URL.
     gemini_api_url: str = field(
         default_factory=lambda: os.getenv(
             "GEMINI_API_URL",

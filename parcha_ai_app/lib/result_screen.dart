@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'api_service.dart';
 import 'models.dart';
+import 'reminder_service.dart';
 import 'theme.dart';
 
 class ResultScreen extends StatefulWidget {
@@ -20,15 +21,20 @@ class ResultScreen extends StatefulWidget {
 class _ResultScreenState extends State<ResultScreen> {
   final ApiService _api = ApiService();
   final AudioPlayer _audioPlayer = AudioPlayer();
+  final ReminderService _reminderService = ReminderService();
 
   bool _isLoading = true;
   String? _errorMessage;
   PrescriptionResult? _result;
   String? _currentlyPlayingUrl;
+  
+  // Track reminder state per medicine
+  Map<int, bool> _reminderStates = {};
 
   @override
   void initState() {
     super.initState();
+    _reminderService.initialize();
     _loadResult();
   }
 
@@ -47,8 +53,20 @@ class _ResultScreenState extends State<ResultScreen> {
     try {
       final result = await _api.getResult(widget.prescriptionId);
       if (!mounted) return;
+      
+      // Load reminder states
+      final reminderStates = <int, bool>{};
+      final medicines = result.extractionResponse?.extractedMedicines ?? [];
+      for (int i = 0; i < medicines.length; i++) {
+        reminderStates[i] = await _reminderService.hasReminders(
+          widget.prescriptionId,
+          i,
+        );
+      }
+      
       setState(() {
         _result = result;
+        _reminderStates = reminderStates;
         _isLoading = false;
       });
     } on ApiException catch (e) {
@@ -78,6 +96,77 @@ class _ResultScreenState extends State<ResultScreen> {
     _audioPlayer.onPlayerComplete.first.then((_) {
       if (mounted) setState(() => _currentlyPlayingUrl = null);
     });
+  }
+
+  Future<void> _toggleReminders(MedicineDetail medicine, int medicineIndex) async {
+    final currentlyEnabled = _reminderStates[medicineIndex] ?? false;
+
+    if (!currentlyEnabled) {
+      // Request permissions first
+      final granted = await _reminderService.requestPermissions();
+      if (!granted) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Notification permission is required to set reminders. '
+              'Please enable notifications in your device settings.',
+            ),
+            duration: Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
+
+      // Schedule reminders
+      final scheduled = await _reminderService.scheduleMedicineReminders(
+        prescriptionId: widget.prescriptionId,
+        medicine: medicine,
+        medicineIndex: medicineIndex,
+      );
+
+      if (!mounted) return;
+
+      if (scheduled) {
+        setState(() {
+          _reminderStates[medicineIndex] = true;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Reminders set for ${medicine.medicineName}'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Could not schedule reminders for ${medicine.medicineName}. '
+              'Frequency may be "as needed" or unparseable.',
+            ),
+            backgroundColor: AppColors.warning,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } else {
+      // Cancel reminders
+      await _reminderService.cancelMedicineReminders(
+        prescriptionId: widget.prescriptionId,
+        medicineIndex: medicineIndex,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _reminderStates[medicineIndex] = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Reminders cancelled for ${medicine.medicineName}'),
+        ),
+      );
+    }
   }
 
   @override
@@ -210,7 +299,7 @@ class _ResultScreenState extends State<ResultScreen> {
               : null;
           return Padding(
             padding: const EdgeInsets.only(bottom: AppSpacing.md),
-            child: _buildMedicineCard(medicine, audioResult),
+            child: _buildMedicineCard(medicine, audioResult, index),
           );
         }),
       ],
@@ -299,7 +388,7 @@ class _ResultScreenState extends State<ResultScreen> {
     );
   }
 
-  Widget _buildMedicineCard(MedicineDetail medicine, MedicineAudioResult? audioResult) {
+  Widget _buildMedicineCard(MedicineDetail medicine, MedicineAudioResult? audioResult, int medicineIndex) {
     return Card(
       elevation: 3,
       child: Column(
@@ -330,7 +419,7 @@ class _ResultScreenState extends State<ResultScreen> {
                   const SizedBox(height: AppSpacing.md),
                   const Divider(),
                   const SizedBox(height: AppSpacing.md),
-                  _buildUrduSection(audioResult),
+                  _buildUrduSection(audioResult, medicine, medicineIndex),
                 ],
               ],
             ),
@@ -586,8 +675,9 @@ class _ResultScreenState extends State<ResultScreen> {
     );
   }
 
-  Widget _buildUrduSection(MedicineAudioResult audioResult) {
+  Widget _buildUrduSection(MedicineAudioResult audioResult, MedicineDetail medicine, int medicineIndex) {
     final isPlaying = _currentlyPlayingUrl == audioResult.audioUrl;
+    final reminderEnabled = _reminderStates[medicineIndex] ?? false;
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -641,6 +731,35 @@ class _ResultScreenState extends State<ResultScreen> {
               fontStyle: FontStyle.italic,
               color: AppColors.textTertiary,
             ),
+          ),
+        ],
+        
+        // Medicine reminder button (NEW)
+        const SizedBox(height: AppSpacing.sm),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () => _toggleReminders(medicine, medicineIndex),
+            icon: Icon(reminderEnabled ? Icons.notifications_off : Icons.notifications_active),
+            label: Text(reminderEnabled ? 'Cancel Reminders' : 'Set Reminders'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: reminderEnabled ? AppColors.textSecondary : AppColors.primary,
+              foregroundColor: AppColors.textOnPrimary,
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+            ),
+          ),
+        ),
+        
+        // Reminder info text
+        if (!reminderEnabled) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'Get notifications to take this medicine on time',
+            style: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.textTertiary,
+              fontStyle: FontStyle.italic,
+            ),
+            textAlign: TextAlign.center,
           ),
         ],
       ],

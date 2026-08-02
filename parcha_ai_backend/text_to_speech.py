@@ -100,7 +100,7 @@ class TextToSpeechEngine:
         return output_path
 
     # -------------------------------------------------------------------
-    # FALLBACK: Coqui TTS (offline)
+    # FALLBACK: Coqui TTS 
     # -------------------------------------------------------------------
     def _synthesize_coqui(self, text: str, output_path: Path) -> Path:
 
