@@ -282,10 +282,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Date and time
+                    // Date and time (converted from UTC to PKT)
                     Text(
                       prescription.createdAt != null
-                          ? DateFormat('MMM dd, yyyy • h:mm a').format(prescription.createdAt!)
+                          ? _formatPktTime(prescription.createdAt!)
                           : 'Date unknown',
                       style: AppTextStyles.bodyMedium.copyWith(
                         fontWeight: FontWeight.w600,
@@ -336,5 +336,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ),
       ),
     );
+  }
+
+  /// Convert UTC time to Pakistan Standard Time (PKT = UTC+5) for display
+  String _formatPktTime(DateTime utcTime) {
+    // Ensure the input is treated as UTC
+    final DateTime utc = utcTime.isUtc ? utcTime : DateTime.utc(
+      utcTime.year,
+      utcTime.month,
+      utcTime.day,
+      utcTime.hour,
+      utcTime.minute,
+      utcTime.second,
+    );
+    
+    final DateTime pktTime = utc.add(const Duration(hours: 5));
+    
+    // Format for display
+    return DateFormat('MMM dd, yyyy • h:mm a').format(pktTime);
   }
 }

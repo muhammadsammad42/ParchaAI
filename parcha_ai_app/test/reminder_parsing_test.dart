@@ -16,6 +16,10 @@ void main() {
         [const TimeOfDay(hour: 9, minute: 0)],
       );
       expect(
+        reminderService.parseFrequencyToTimes('once a day'),
+        [const TimeOfDay(hour: 9, minute: 0)],
+      );
+      expect(
         reminderService.parseFrequencyToTimes('1-0-0'),
         [const TimeOfDay(hour: 9, minute: 0)],
       );
@@ -27,6 +31,15 @@ void main() {
         reminderService.parseFrequencyToTimes('ایک بار'),
         [const TimeOfDay(hour: 9, minute: 0)],
       );
+      // Real-world: with context in parentheses
+      expect(
+        reminderService.parseFrequencyToTimes('Once daily (morning)'),
+        [const TimeOfDay(hour: 9, minute: 0)],
+      );
+      expect(
+        reminderService.parseFrequencyToTimes('Once daily (at night)'),
+        [const TimeOfDay(hour: 9, minute: 0)],
+      );
     });
 
     test('Twice daily patterns', () {
@@ -35,9 +48,17 @@ void main() {
         const TimeOfDay(hour: 21, minute: 0),
       ];
       expect(reminderService.parseFrequencyToTimes('twice daily'), expected);
+      expect(reminderService.parseFrequencyToTimes('twice a day'), expected);
+      expect(reminderService.parseFrequencyToTimes('2 times daily'), expected);
+      expect(reminderService.parseFrequencyToTimes('2 times a day'), expected);
       expect(reminderService.parseFrequencyToTimes('1-0-1'), expected);
       expect(reminderService.parseFrequencyToTimes('bd'), expected);
       expect(reminderService.parseFrequencyToTimes('دو بار'), expected);
+      // Real-world: every 12 hours
+      expect(reminderService.parseFrequencyToTimes('Every 12 hours'), expected);
+      // Real-world: with context in parentheses
+      expect(reminderService.parseFrequencyToTimes('Twice daily (after food)'), expected);
+      expect(reminderService.parseFrequencyToTimes('Twice daily (before food)'), expected);
     });
 
     test('Three times daily patterns', () {
@@ -47,9 +68,16 @@ void main() {
         const TimeOfDay(hour: 21, minute: 0),
       ];
       expect(reminderService.parseFrequencyToTimes('three times daily'), expected);
+      expect(reminderService.parseFrequencyToTimes('three times a day'), expected);
+      expect(reminderService.parseFrequencyToTimes('3 times daily'), expected);
+      expect(reminderService.parseFrequencyToTimes('3 times a day'), expected);
       expect(reminderService.parseFrequencyToTimes('1-1-1'), expected);
       expect(reminderService.parseFrequencyToTimes('tid'), expected);
       expect(reminderService.parseFrequencyToTimes('تین بار'), expected);
+      // Real-world: every 8 hours
+      expect(reminderService.parseFrequencyToTimes('Every 8 hours'), expected);
+      // Real-world: with context
+      expect(reminderService.parseFrequencyToTimes('Three times daily (with meals)'), expected);
     });
 
     test('Four times daily patterns', () {
@@ -60,8 +88,13 @@ void main() {
         const TimeOfDay(hour: 22, minute: 0),
       ];
       expect(reminderService.parseFrequencyToTimes('four times daily'), expected);
+      expect(reminderService.parseFrequencyToTimes('four times a day'), expected);
+      expect(reminderService.parseFrequencyToTimes('4 times daily'), expected);
+      expect(reminderService.parseFrequencyToTimes('4 times a day'), expected);
       expect(reminderService.parseFrequencyToTimes('1-1-1-1'), expected);
       expect(reminderService.parseFrequencyToTimes('qid'), expected);
+      // Real-world: every 6 hours
+      expect(reminderService.parseFrequencyToTimes('Every 6 hours'), expected);
     });
 
     test('PRN/As-needed patterns - should return null', () {
@@ -86,10 +119,27 @@ void main() {
         [const TimeOfDay(hour: 9, minute: 0)],
       );
       expect(
-        reminderService.parseFrequencyToTimes('BD'),
+        reminderService.parseFrequencyToTimes('Twice Daily'),
         [
           const TimeOfDay(hour: 9, minute: 0),
           const TimeOfDay(hour: 21, minute: 0),
+        ],
+      );
+      expect(
+        reminderService.parseFrequencyToTimes('THREE TIMES A DAY'),
+        [
+          const TimeOfDay(hour: 9, minute: 0),
+          const TimeOfDay(hour: 14, minute: 0),
+          const TimeOfDay(hour: 21, minute: 0),
+        ],
+      );
+      expect(
+        reminderService.parseFrequencyToTimes('EVERY 6 HOURS'),
+        [
+          const TimeOfDay(hour: 8, minute: 0),
+          const TimeOfDay(hour: 13, minute: 0),
+          const TimeOfDay(hour: 18, minute: 0),
+          const TimeOfDay(hour: 22, minute: 0),
         ],
       );
     });

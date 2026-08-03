@@ -101,69 +101,210 @@ class _ResultScreenState extends State<ResultScreen> {
   Future<void> _toggleReminders(MedicineDetail medicine, int medicineIndex) async {
     final currentlyEnabled = _reminderStates[medicineIndex] ?? false;
 
-    if (!currentlyEnabled) {
-      // Request permissions first
-      final granted = await _reminderService.requestPermissions();
-      if (!granted) {
+    // Show loading state immediately
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: const [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+            SizedBox(width: 12),
+            Expanded(child: Text('Processing...')),
+          ],
+        ),
+        duration: const Duration(seconds: 30),
+      ),
+    );
+
+    try {
+      if (!currentlyEnabled) {
+        // Request permissions first
+        bool granted = false;
+        try {
+          granted = await _reminderService.requestPermissions();
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Permission request failed: $e\n\n'
+                'Please enable notifications manually in Settings > Apps > ParchaAI > Notifications',
+              ),
+              backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 6),
+              action: SnackBarAction(
+                label: 'OK',
+                textColor: Colors.white,
+                onPressed: () {},
+              ),
+            ),
+          );
+          return;
+        }
+
+        if (!granted) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'Notification permission is required to set reminders.\n\n'
+                'Please enable notifications in:\n'
+                'Settings > Apps > ParchaAI > Notifications',
+              ),
+              backgroundColor: AppColors.warning,
+              duration: const Duration(seconds: 6),
+              action: SnackBarAction(
+                label: 'OK',
+                textColor: Colors.white,
+                onPressed: () {},
+              ),
+            ),
+          );
+          return;
+        }
+
+        // Schedule reminders
+        bool scheduled = false;
+        try {
+          scheduled = await _reminderService.scheduleMedicineReminders(
+            prescriptionId: widget.prescriptionId,
+            medicine: medicine,
+            medicineIndex: medicineIndex,
+          );
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Failed to schedule reminders: $e\n\n'
+                'Frequency: ${medicine.frequency}\n'
+                'Duration: ${medicine.duration}',
+              ),
+              backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 6),
+              action: SnackBarAction(
+                label: 'OK',
+                textColor: Colors.white,
+                onPressed: () {},
+              ),
+            ),
+          );
+          return;
+        }
+
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Notification permission is required to set reminders. '
-              'Please enable notifications in your device settings.',
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+        if (scheduled) {
+          setState(() {
+            _reminderStates[medicineIndex] = true;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Reminders set for ${medicine.medicineName}\n'
+                      'Frequency: ${medicine.frequency}',
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: AppColors.success,
+              duration: const Duration(seconds: 3),
             ),
-            duration: Duration(seconds: 4),
-          ),
-        );
-        return;
-      }
-
-      // Schedule reminders
-      final scheduled = await _reminderService.scheduleMedicineReminders(
-        prescriptionId: widget.prescriptionId,
-        medicine: medicine,
-        medicineIndex: medicineIndex,
-      );
-
-      if (!mounted) return;
-
-      if (scheduled) {
-        setState(() {
-          _reminderStates[medicineIndex] = true;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Reminders set for ${medicine.medicineName}'),
-            backgroundColor: AppColors.success,
-          ),
-        );
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Could not schedule reminders for ${medicine.medicineName}\n\n'
+                'Reason: Frequency may be "as needed" (PRN/SOS) or unparseable.\n'
+                'Frequency: "${medicine.frequency}"\n'
+                'Duration: "${medicine.duration}"',
+              ),
+              backgroundColor: AppColors.warning,
+              duration: const Duration(seconds: 6),
+              action: SnackBarAction(
+                label: 'OK',
+                textColor: Colors.white,
+                onPressed: () {},
+              ),
+            ),
+          );
+        }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Could not schedule reminders for ${medicine.medicineName}. '
-              'Frequency may be "as needed" or unparseable.',
+        // Cancel reminders
+        try {
+          await _reminderService.cancelMedicineReminders(
+            prescriptionId: widget.prescriptionId,
+            medicineIndex: medicineIndex,
+          );
+
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+          setState(() {
+            _reminderStates[medicineIndex] = false;
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.notifications_off, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text('Reminders cancelled for ${medicine.medicineName}'),
+                  ),
+                ],
+              ),
+              duration: const Duration(seconds: 2),
             ),
-            backgroundColor: AppColors.warning,
-            duration: const Duration(seconds: 4),
-          ),
-        );
+          );
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to cancel reminders: $e'),
+              backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
       }
-    } else {
-      // Cancel reminders
-      await _reminderService.cancelMedicineReminders(
-        prescriptionId: widget.prescriptionId,
-        medicineIndex: medicineIndex,
-      );
-
+    } catch (e) {
+      // Catch-all for any unexpected errors
       if (!mounted) return;
-
-      setState(() {
-        _reminderStates[medicineIndex] = false;
-      });
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Reminders cancelled for ${medicine.medicineName}'),
+          content: Text(
+            'Unexpected error: $e\n\n'
+            'Medicine: ${medicine.medicineName}\n'
+            'Frequency: ${medicine.frequency}',
+          ),
+          backgroundColor: AppColors.error,
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(
+            label: 'OK',
+            textColor: Colors.white,
+            onPressed: () {},
+          ),
         ),
       );
     }
