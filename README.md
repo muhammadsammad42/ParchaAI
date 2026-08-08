@@ -510,13 +510,4 @@ Please open an issue before starting major work to discuss the approach.
 This project is licensed under the [MIT License](LICENSE).
 
 ---
-
-## 📞 Support
-
-For questions, issues, or feedback:
-- Open an [issue](https://github.com/yourusername/ParchaAI/issues)
-- Check [existing issues](https://github.com/yourusername/ParchaAI/issues?q=is%3Aissue) before creating a new one
-
----
-
 **Built with ❤️ for patient safety and healthcare accessibility**
