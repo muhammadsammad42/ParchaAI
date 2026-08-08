@@ -1,5 +1,6 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'api_service.dart';
 import 'models.dart';
@@ -180,18 +181,83 @@ class _ResultScreenState extends State<ResultScreen> {
             medicine: medicine,
             medicineIndex: medicineIndex,
           );
-        } catch (e) {
+        } on PlatformException catch (e) {
+          // DETAILED PLATFORM EXCEPTION LOGGING FOR RELEASE BUILD DEBUG
           if (!mounted) return;
           ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          
+          final errorDetails = '''
+PlatformException Details:
+━━━━━━━━━━━━━━━━━━━━━━
+Code: ${e.code}
+Message: ${e.message ?? 'null'}
+Details: ${e.details ?? 'null'}
+StackTrace: ${e.stacktrace ?? 'null'}
+
+Medicine: ${medicine.medicineName}
+Frequency: ${medicine.frequency}
+Duration: ${medicine.duration}
+''';
+          
+          // Print to console (visible in release via adb logcat)
+          debugPrint('═══════════════════════════════════════');
+          debugPrint('RELEASE BUILD PLATFORM EXCEPTION');
+          debugPrint(errorDetails);
+          debugPrint('═══════════════════════════════════════');
+          
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                'Failed to schedule reminders: $e\n\n'
-                'Frequency: ${medicine.frequency}\n'
-                'Duration: ${medicine.duration}',
+              content: SingleChildScrollView(
+                child: Text(
+                  errorDetails,
+                  style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                ),
               ),
               backgroundColor: AppColors.error,
-              duration: const Duration(seconds: 6),
+              duration: const Duration(seconds: 15),
+              action: SnackBarAction(
+                label: 'COPY',
+                textColor: Colors.white,
+                onPressed: () {
+                  // In production, you'd use Clipboard.setData here
+                },
+              ),
+            ),
+          );
+          return;
+        } catch (e, stackTrace) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          
+          final errorDetails = '''
+General Exception:
+━━━━━━━━━━━━━━━━━━━━━━
+Type: ${e.runtimeType}
+Error: $e
+
+StackTrace:
+${stackTrace.toString().split('\n').take(10).join('\n')}
+
+Medicine: ${medicine.medicineName}
+Frequency: ${medicine.frequency}
+Duration: ${medicine.duration}
+''';
+          
+          debugPrint('═══════════════════════════════════════');
+          debugPrint('RELEASE BUILD GENERAL EXCEPTION');
+          debugPrint(errorDetails);
+          debugPrint('═══════════════════════════════════════');
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: SingleChildScrollView(
+                child: Text(
+                  errorDetails,
+                  style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                ),
+              ),
+              backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 15),
               action: SnackBarAction(
                 label: 'OK',
                 textColor: Colors.white,

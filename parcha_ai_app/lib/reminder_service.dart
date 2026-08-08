@@ -25,13 +25,14 @@ class ReminderService {
       // Initialize timezone data
       tz.initializeTimeZones();
       
-      // Find user's local timezone
-      final String timeZoneName = DateTime.now().timeZoneName;
+      // Use proper IANA timezone for Pakistan
+      // Try Pakistan timezone first, fallback to UTC if not available
       try {
-        tz.setLocalLocation(tz.getLocation(timeZoneName));
+        tz.setLocalLocation(tz.getLocation('Asia/Karachi'));
+        debugPrint('Timezone set to Asia/Karachi (PKT)');
       } catch (e) {
-        // Fallback to UTC if timezone not found
-        debugPrint('Could not find timezone $timeZoneName, falling back to UTC: $e');
+        // Fallback to UTC if Asia/Karachi not found
+        debugPrint('Could not find timezone Asia/Karachi, falling back to UTC: $e');
         tz.setLocalLocation(tz.getLocation('UTC'));
       }
 
@@ -52,8 +53,10 @@ class ReminderService {
         debugPrint('WARNING: Notification plugin initialization returned false');
       }
       
+      // CRITICAL: Create notification channel on Android 8+
+      // Without this, scheduling will fail with PlatformException
       const androidChannel = AndroidNotificationChannel(
-        'medicine_reminders', 
+        'medicine_reminders', // Must match the channelId used in NotificationDetails
         'Medicine Reminders',
         description: 'Reminders to take prescribed medicines on time',
         importance: Importance.high,
@@ -70,11 +73,44 @@ class ReminderService {
         debugPrint('Notification channel created successfully');
       }
       
+      // CRITICAL FIX: Clear any corrupted stored notification data
+      // This fixes "Missing type parameter" deserialization errors from
+      // legacy/incompatible notification data stored by previous plugin versions
+      await _clearCorruptedNotificationData();
+      
       _initialized = true;
       debugPrint('ReminderService initialized successfully');
     } catch (e) {
       debugPrint('ERROR: Failed to initialize ReminderService: $e');
-      rethrow; 
+      rethrow; // Re-throw so caller can handle
+    }
+  }
+
+  /// Clear corrupted stored notification data (one-time cleanup)
+  /// This prevents "Missing type parameter" deserialization errors
+  Future<void> _clearCorruptedNotificationData() async {
+    final prefs = await SharedPreferences.getInstance();
+    const cleanupKey = 'notification_data_cleaned_v1';
+    
+    // Only run this cleanup once per app installation
+    final alreadyCleaned = prefs.getBool(cleanupKey) ?? false;
+    if (alreadyCleaned) {
+      debugPrint('Notification data already cleaned, skipping');
+      return;
+    }
+    
+    try {
+      // Cancel all existing scheduled notifications
+      // This clears the plugin's internal stored notification data
+      await _notificationsPlugin.cancelAll();
+      debugPrint('Cleared all stored notification data to prevent deserialization errors');
+      
+      // Mark cleanup as complete
+      await prefs.setBool(cleanupKey, true);
+      debugPrint('Notification data cleanup complete');
+    } catch (e) {
+      debugPrint('WARNING: Failed to clear notification data: $e');
+      // Don't rethrow - initialization should continue even if cleanup fails
     }
   }
 
@@ -285,8 +321,8 @@ class ReminderService {
 
           await _notificationsPlugin.zonedSchedule(
             notificationId,
-            'وقت ہو گیا ہے', 
-            '${medicine.medicineName} لینے کا', 
+            'وقت ہو گیا ہے', // "Time has come"
+            '${medicine.medicineName} لینے کا', // "To take [medicine name]"
             scheduledDate,
             NotificationDetails(
               android: AndroidNotificationDetails(
@@ -295,7 +331,8 @@ class ReminderService {
                 channelDescription: 'Reminders to take prescribed medicines',
                 importance: Importance.high,
                 priority: Priority.high,
-                icon: '@mipmap/ic_launcher',
+                // Use dedicated notification icon (white silhouette on transparent)
+                icon: 'ic_notification',
               ),
               iOS: const DarwinNotificationDetails(
                 presentAlert: true,
